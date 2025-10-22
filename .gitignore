@@ -9,3 +9,4 @@ src/tmp_*
 src/tmp_output_for_code_retrieve.json
 
 outputs/
+inject_api_key.sh

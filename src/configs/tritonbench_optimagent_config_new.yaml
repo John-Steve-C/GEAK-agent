@@ -1,5 +1,5 @@
 # LLM model
-api_key: "your_api_key_here"
+api_key: ${env:OPENAI_API_KEY}
 # model_id: "dvue-aoai-001-gpt-4.1"
 model_id: "gpt-4.1-mini"
 temperature: 1.0

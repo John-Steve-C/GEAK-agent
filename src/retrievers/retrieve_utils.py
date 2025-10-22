@@ -7,6 +7,7 @@ from openai import OpenAI
 from transformers import pipeline
 from typing import List
 from tenacity import retry, stop_after_attempt, wait_random_exponential
+import os
 
 # embedder = pipeline("feature-extraction", model="/shared/models/hf/jina-embeddings-v3", trust_remote_code=True)
 
@@ -15,7 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 #     api_key="token-abc123",
 #     timeout=None,
 # )
-client = OpenAI(api_key="your_api_key_here")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
 def get_embedding(text: str) -> List[float]:
     response = client.embeddings.create(
