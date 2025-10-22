@@ -1,0 +1,33 @@
+# LLM model
+api_key: "your_api_key_here"
+# model_id: "dvue-aoai-001-gpt-4.1"
+model_id: "gpt-4.1-mini"
+temperature: 1.0
+
+
+datapath_prefix: "/home/wentao/GEAK-eval/geak_eval/data/"
+
+# TritonBench
+statis_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
+py_folder: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1"
+instruction_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
+corpus_path: "./dataloaders/TB_eval/train_crawl.json"
+golden_metrics: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics"
+perf_ref_folder: null
+perf_G_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G"
+py_interpreter: "python"
+result_path: null
+mem_file: null # "../outputs/split_embed_optimagent_gpt41_mini_mem_0.json"
+start_iter: 0
+datalen: 20
+start_idx: 0
+target_kernels: null
+
+# agent
+# output_path: "../outputs/split_embed_optimagent_gpt41_mini.jsonl"
+# output_path: "../outputs/test/true_embed_optimagent_gpt41_mini.jsonl"
+output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
+max_iteration: 20
+multi_thread: true
+thread_num: 128
+ancestor_num: 5
