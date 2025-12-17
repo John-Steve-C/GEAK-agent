@@ -3,12 +3,14 @@ from models.OpenAI import OpenAIModel
 from dataloaders.TritonBench import TritonBench
 from args_config import load_config
 
+import os
 
 def main():
     args = load_config("configs/tritonbench_optimagent_config_new.yaml")
 
+
     # setup LLM model
-    model = OpenAIModel(api_key=args.api_key, model_id=args.model_id)
+    model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
 
     # setup dataset
     dataset = TritonBench(statis_path=args.statis_path, 

@@ -26,8 +26,9 @@ target_kernels: null
 # agent
 # output_path: "../outputs/split_embed_optimagent_gpt41_mini.jsonl"
 # output_path: "../outputs/test/true_embed_optimagent_gpt41_mini.jsonl"
-output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
-max_iteration: 20
+# output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
+output_path: "../outputs/test/optimagent_gpt41_mini.jsonl"
+max_iteration: 10
 multi_thread: true
 thread_num: 128
 ancestor_num: 5

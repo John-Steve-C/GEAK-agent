@@ -22,8 +22,9 @@ if __name__ == "__main__":
     # root = "../outputs/_embed_optimagent_gpt41_mini_mem"
 
     # root = "../outputs/test/embed_optimagent_gpt41_mini_mem"
-    root = "../outputs/test/compare_split_embed_optimagent_gpt41_mini_mem"
+    # root = "../outputs/test/compare_split_embed_optimagent_gpt41_mini_mem"
     # root = "../outputs/test/true_embed_optimagent_gpt41_mini_mem"
+    root = "../outputs/full/optimagent_gpt41_mini_mem"
 
     flag_pass_exe = [0] * 184   # total 184 samples
     solutions = [None] * 184

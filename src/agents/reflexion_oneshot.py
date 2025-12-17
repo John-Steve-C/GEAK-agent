@@ -21,17 +21,17 @@ class Reflexion_Oneshot(Reflexion):
         self.dataset = dataset
         self.memories = []
 
-        # self.instruction_retriever = BM25Retriever()
-        self.instruction_retriever = EmbeddingRetriever(mode="instruction")
+        self.instruction_retriever = BM25Retriever()
+        # self.instruction_retriever = EmbeddingRetriever(mode="instruction")
         self.instruction_retriever.process(content_input_path=corpus_path)
         
-        # self.code_retriever = BM25Retriever(mode="code")
-        self.code_retriever = EmbeddingRetriever(mode="code")
+        self.code_retriever = BM25Retriever(mode="code")
+        # self.code_retriever = EmbeddingRetriever(mode="code")
         # self.code_retriever = coreSplitRetriever(mode="code")
-        self.code_retriever_2 = coreToWholeRetriever(mode="code")
+        # self.code_retriever_2 = coreToWholeRetriever(mode="code")
 
         self.code_retriever.process(content_input_path=corpus_path)
-        self.code_retriever_2.process(content_input_path=corpus_path)
+        # self.code_retriever_2.process(content_input_path=corpus_path)
 
         self.memory_init(mem_file)
 

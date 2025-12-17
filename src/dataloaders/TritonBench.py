@@ -208,6 +208,100 @@ class TritonBench:
                 with open(os.path.join(tmp_dir, perf_file_name), "w") as f:
                     f.write(golden_metrics)
                 
+    def write_perf_file_single(self, input_folder_path, results_path, tmp_dir, filename):
+        """
+        Generates a single performance evaluation script for the specified filename.
+        
+        Args:
+            input_folder_path: Path containing the 'pass_exe' code (e.g. ./pass_exe)
+            results_path: Path where the resulting JSON should be saved (e.g. ./perf_results)
+            tmp_dir: Path where the generated perf script should be saved (e.g. ./tmp/perf_gen)
+            filename: The specific python filename (e.g. 'fused_attention.py')
+        """
+        os.makedirs(tmp_dir, exist_ok=True)
+        os.makedirs(results_path, exist_ok=True)
+
+        tab = ' ' * 4
+        
+        # --- Step 1: Update performance_utils.py (Shared Resource) ---
+        # Note: In multi-threading, this file is written by multiple threads. 
+        # Since they write the exact same 'results_path', it is generally safe, 
+        # but theoretically a lock could be used here.
+        performance_utils_path = os.path.join(self.perf_G_path, "performance_utils.py")
+        
+        try:
+            with open(performance_utils_path, 'r') as f:
+                performance_utils = f.readlines()
+            
+            performance_utils_lines = []
+            for line in performance_utils:
+                if 'folder_path = ' in line:
+                    line = tab * 2 + f'folder_path = "{results_path}"\n'
+                performance_utils_lines.append(line)
+            
+            with open(performance_utils_path, 'w') as f:
+                f.write("".join(performance_utils_lines))
+        except Exception as e:
+            print(f"Warning: Failed to update performance_utils.py (might be locked by another thread): {e}")
+
+        # --- Step 2: Generate the specific perf script ---
+        # Construct expected perf filename (e.g., 'gemm.py' -> 'gemm_perf.py')
+        if not filename.endswith(".py"): 
+            return
+            
+        op = filename[:-3]
+        perf_file_name = op + "_perf.py"
+        
+        # Ensure the source file actually exists in the input folder
+        if not os.path.exists(os.path.join(input_folder_path, filename)):
+            print(f"Skipping perf generation: {filename} not found in {input_folder_path}")
+            return
+
+        # Ensure the golden metric template exists
+        golden_metrics_list = os.listdir(self.golden_metrics_folder)
+        if perf_file_name not in golden_metrics_list:
+            print(f"Warning: {perf_file_name} not in golden_metrics_list, skipping.")
+            return
+
+        # Read and Modify the Golden Metric Code
+        with open(os.path.join(self.golden_metrics_folder, perf_file_name), "r") as f:
+            lines = f.readlines()
+            updated_lines = []
+            for line in lines:
+                if line == "sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))\n":
+                    updated_lines.append(f"sys.path.append('{input_folder_path}')\n")
+                    updated_lines.append(f"sys.path.append('{self.perf_G_path}')\n")
+                line = line.replace("from TritonBench_v1.", "from ")
+                line = line.replace("op_perf.get_do_bench_config()", "op_perf.get_do_bench_config(warmup=100, rep=1000)")
+                line = line.replace('folder_path = "/home/lishangzhan/triton/bench_performance/results"', f'folder_path = "{results_path}"')
+                updated_lines.append(line)
+            golden_metrics = "".join(updated_lines)
+
+        # Inject Try/Except blocks for robustness
+        golden_metrics_lines = golden_metrics.split("\n")
+        flag = False
+        index_1, index_2 = -1, -1
+        
+        for i in range(len(golden_metrics_lines)):
+            if "input_tensor = self.to_cuda(input_tensor_)" in golden_metrics_lines[i]:
+                index_1 = i
+            if "results.append(result)" in golden_metrics_lines[i]:
+                index_2 = i + 1
+                flag = True
+        
+        if flag and index_1 != -1:
+            for i in range(index_1, index_2):
+                golden_metrics_lines[i] = tab + golden_metrics_lines[i]                
+            golden_metrics_lines.insert(index_1, tab*3 + "try:")
+            golden_metrics_lines.insert(index_2 + 1, tab*3 + "except Exception as e:")
+            golden_metrics_lines.insert(index_2 + 2, tab*4 + 'print(f"Failed to run benchmark for input tensor. Error: {e}")')
+            golden_metrics = "\n".join(golden_metrics_lines)
+
+        # Write the final script
+        output_path = os.path.join(tmp_dir, perf_file_name)
+        with open(output_path, "w") as f:
+            f.write(golden_metrics)
+                
     def _run_perf_script(self, args):
         timeout_sec = 600  # 10 mins
         progress_lock = Lock()
@@ -292,6 +386,54 @@ class TritonBench:
                 tqdm.write(f"✅ finished {idx+1}/{total_scripts}: {os.path.basename(script)}")
                 pbar.update(1)
 
+    def run_perf_script_single(self, script_dir, log_dir, gpu_id, script_name):
+        """
+        Runs a single performance script.
+        
+        Args:
+            script_dir: Directory containing the script (e.g. ./tmp/perf_gen)
+            log_dir: Directory to save logs
+            gpu_id: GPU ID to use
+            script_name: The name of the script file to run (e.g. 'gemm_perf.py')
+        """
+        os.makedirs(log_dir, exist_ok=True)
+        
+        script_path = os.path.join(script_dir, script_name)
+        if not os.path.exists(script_path):
+            print(f"Script not found: {script_path}")
+            return
+
+        timeout_sec = 600  # 10 mins
+        
+        # Set up environment variables
+        env = os.environ.copy()
+        env["HIP_VISIBLE_DEVICES"] = str(gpu_id)
+        
+        # Prepare logs
+        # log_file = os.path.join(log_dir, f"{script_name}.log")
+        # err_file = os.path.join(log_dir, f"{script_name}.err")
+
+        try:
+            # Run subprocess
+            result = subprocess.run(
+                [self.py_interpreter, script_path], 
+                capture_output=True, 
+                text=True,
+                env=env,
+                timeout=timeout_sec
+            )
+            
+            # Optional: Check return code if you want to log failures specifically
+            if result.returncode != 0:
+                print(f"Script {script_name} failed with return code {result.returncode}")
+                # print(f"Stderr: {result.stderr}")
+
+        except subprocess.TimeoutExpired:
+            print(f"The subprocess timed out for {script_name}")
+        except Exception as e:
+            print(f"The subprocess failed for {script_name} due to {e}")
+        
+        print(f"✅ finished {script_name}")
 
 
     def calculate(self, path_gen, path_ref=None):
