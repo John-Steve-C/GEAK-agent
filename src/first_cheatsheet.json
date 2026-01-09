@@ -1,0 +1,79 @@
+{
+    "solutions_and_patterns": [
+        {
+            "id": "c2ca4320",
+            "content": "Optimize matrix multiplication by dividing the output matrix into blocks processed in parallel, where each block computes a submatrix. Use multi-dimensional pointer arithmetic based on tensor strides to calculate block memory addresses. Adapt pointer arithmetic to handle non-multiples of block sizes by padding and masking during loads and stores to safely handle boundaries. Improve L2 cache utilization by reordering computation launch grids in grouped column-major order to promote data reuse within groups, reducing overall memory transfers. Utilize higher precision (e.g., float32) accumulation internally to enhance numerical accuracy even when inputs and outputs are in lower precision (e.g., float16). Incorporate autotuning frameworks that explore configurations of block sizes, warp counts, and pipeline stages to empirically identify performance-optimal parameters for given hardware and problem sizes. Support fusion of activation functions post-accumulation to allow flexible, high-performance custom neural network operations. These strategies collectively enable creation of customizable, efficient GPU kernels comparable to vendor libraries like cuBLAS, but with extensibility benefits.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2f0477d9",
+            "content": "Implement fused multi-stage GPU kernels for attention by decomposing computation into tiled sub-blocks processed in multiple pipeline stages, enabling efficient handling of causal masking and scaling. Use autotuning with configuration pruning based on hardware generation and problem size to find optimal block shapes and warp counts, adapting to platform-specific constraints such as those on AMD or NVIDIA Hopper/Blackwell architectures. Employ flexible tensor descriptors that support varying memory layouts and transpositions at runtime, facilitating efficient tile-wise loading and storage for both standard and FP8 data types. Incorporate numerical stability techniques such as log-sum-exp scaling to maintain accuracy during softmax and exponential operations within attention. Exploit architectural features and warp specialization to improve throughput and reduce register pressure when feasible. Structure the backward pass with blocked matrix operations that mirror the forward pass tiling, including preprocessing steps to accumulate correction factors and carefully implement masking logic in gradient computations to enforce autoregressive causality. Integrate conditional compilation and kernel argument specialization to dynamically support causal vs. non-causal modes, precision variants, and hardware capabilities, enabling a unified yet high-performance solution. These strategies systematically extend classical GPU matrix multiplication optimizations to the fused attention pattern, preserving performance while supporting algorithmic flexibility and hardware heterogeneity.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7e07a042",
+            "content": "Leverage external vendor-provided device libraries (e.g., CUDA libdevice or ROCm equivalents) within GPU kernels to perform advanced mathematical operations such as trigonometric functions, ensuring numerical correctness and performance parity with native frameworks. This requires abstracting calls to type-specific versions of the same function and enabling runtime dispatch based on input data types. Additionally, support for backend-specific library paths and conditional linking facilitates portability across hardware platforms and driver stacks. Such integration allows seamless use of tested, optimized device implementations in custom kernels without reimplementing complex math functions.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "48fadcc4",
+            "content": "Design persistent GPU kernels that manage multi-block tiling cooperatively across all streaming multiprocessors by assigning tiles dynamically to each thread block, reducing kernel launch overhead and improving load balancing. Use programmatic mapping of tile IDs to output submatrices via grouped scheduling to optimize resource utilization and concurrency. Employ warp specialization to leverage asynchronous warp scheduling features on supported architectures, enabling software pipelining and improved instruction-level parallelism. Integrate epilogue subtiling, partitioning output accumulator writes into smaller subtile stores, to decrease shared memory footprint in epilogue phases, thereby allowing increased pipeline stages or warps to improve throughput. Combine autotuning of block sizes, warp counts, and pipeline stages with conditional pruning of incompatible configurations based on hardware generation and kernel requirements to empirically optimize performance. Utilize flexible tensor descriptor abstractions both on host and device sides to enable efficient tile-wise loading, storing, and support for multiple data layouts and precisions, improving kernel portability and maintainability. These persistent and descriptor-based kernel strategies enhance matrix multiplication efficiency, especially for large matrices and modern GPU architectures, while complementing and extending classical tiling and fusion techniques.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "d685c2af",
+            "content": "Implement efficient layer normalization kernels by decomposing forward and backward passes into tiled parallel workloads, computing mean and variance via parallel reductions across feature dimensions. For the backward pass, compute vector-Jacobian products by expressing gradients in terms of normalized inputs and inputs' gradients, leveraging intermediate aggregated constants to simplify computation. Employ staged parallel reduction strategies with multiple partial sum buffers protected by fine-grained locks to accumulate gradients of parameters (weights and biases) efficiently across rows, reducing contention and improving cache locality. Follow this with a separate kernel that performs a final reduction over partial sums to obtain parameter gradients, enabling scalable and lock-efficient summation. Utilize block-wise loading with masking to safely handle boundaries and ensure correct computation on feature dimensions that may not align with block sizes. Apply heuristics to select block sizes and group sizes to optimize utilization and synchronization overheads. This pattern generalizes to other normalization operators and scenarios where gradient accumulation requires careful coordination of partial results across thread blocks on GPUs.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "365897d7",
+            "content": "Develop GPU kernels by partitioning data into blocks assigned to parallel programs identified via program IDs, enabling independent processing of contiguous data slices. Use multi-dimensional pointer arithmetic with boundary-checking masks to safely handle inputs not divisible by block sizes, avoiding out-of-bounds memory access. Employ launch grids with configurable block sizes to flexibly map kernel instances to data partitions, allowing scalable performance tuning. Leverage kernel decorators or runtime annotations to enable just-in-time compilation and allow embedding compile-time constants (e.g., block size) for optimization. Employ asynchronous kernel invocation returning handles that can be synchronized later, facilitating concurrency. These practices form a foundation for writing custom, efficient parallel operations on GPUs, especially within high-level frameworks like Triton that abstract low-level GPU programming details.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9f153c23",
+            "content": "Fuse bandwidth-bound operations such as softmax by combining multiple computation stages (e.g., maximum subtraction, exponentiation, summation, division) into a single GPU kernel to minimize DRAM load/store volume. Use on-chip SRAM to hold intermediate data to maximize reuse. Employ masking and padding to handle arbitrary input shapes safely, ensuring block sizes are powers-of-two to comply with GPU block dimension requirements. Utilize multi-program-id grid loops to distribute work over rows or data partitions, balancing load and enabling scalability. Integrate occupancy modeling using device properties (register count, shared memory, warp size) to heuristically tune launch parameters like number of warps, stages, and block sizes for maximal hardware utilization. This pattern dramatically improves performance over naive implementations or automatic framework JIT kernels, especially for operations reducible to parallel reduction patterns fused with elementwise transformations.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "5d0211a5",
+            "content": "Leverage kernel launch concurrency and persistent kernel cooperative loop structures to handle irregular matrix sizes by iterating over data slices within each program, combined with masking to prevent out-of-bounds memory accesses, thus supporting arbitrary input shapes without sacrificing performance or correctness.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "df26f149",
+            "content": "Implement block scaled matrix multiplication kernels that leverage hardware-accelerated tensor core instructions supporting microformats like FP4 and FP8 on modern NVIDIA and AMD GPUs. Organize scale factors into packed tensor layouts tailored to the hardware's tensor core inner-loop access patterns to ensure contiguous memory reads, improving data throughput and latency. On NVIDIA GPUs, use five-dimensional scale factor tensors reshaped and logically transposed to conform to Triton's scaled dot product semantics while aligning with CUDA device expectations. On AMD GPUs, preshuffle scale tensors per-thread to store multiple scale values contiguously, optimizing global memory coalescing and warp-level operand access for CDNA4 architectures. Use flexible tensor descriptor abstractions to enable efficient tile-wise load/store operations for inputs, outputs, and scales, supporting varying precisions and packed microformats. Combine autotuning of block sizes, vectorization widths, and pipeline stages with conditional parameterization of warp counts and hardware capabilities to maximize throughput and numerical accuracy. Integrate runtime queries to detect backend and architecture support for block scaled instructions to dynamically select optimal kernel variants. Provide fallbacks and reference computations by unpacking and broadcasting scale factors, enabling validation against dense floating-point matmul. These strategies systematically extend matrix multiplication optimization techniques by incorporating scale factor management and microformat hardware-specific tuning, enabling high-performance custom kernels that rival vendor implementations like cuBLAS or AMD's ROCm while maintaining extensibility and cross-platform portability.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "80d91eba",
+            "content": "Implement memory-efficient stochastic masking (e.g., dropout) in GPU kernels by generating pseudorandom masks on-the-fly using parallel block-based PRNG with a single seed and element offsets, avoiding materializing full mask tensors. This reduces memory footprint and data movement, while simplifying randomness state management, especially useful for recompute/checkpointing scenarios. Utilize counters or program IDs as offsets combined with a high-quality parallel PRNG (like Philox) to produce reproducible per-element random values within blocks, enabling consistent masks across kernel invocations with identical seeds. Adjust output scaling to maintain expected value properties (e.g., scale retained inputs by 1/(1 - p) in dropout). This pattern generalizes to other stochastic operators requiring randomized masking or selection without extra memory overhead.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "8c99e15f",
+            "content": "Implement grouped GEMM kernels that statically schedule multiple independent GEMM problems within a single GPU kernel by assigning sequential tile ID ranges per GEMM and iterating over tiles statically on device. Track cumulative tile counts across GEMMs to dispatch each GPU program instance to process tiles for one GEMM at a time. Use multi-dimensional pointer arithmetic and tensor descriptors adapted per GEMM to support varying sizes and leading dimensions. Autotune block sizes and number of concurrently active CTAs to saturate GPU SMs, fixing grid size by number of SMs when appropriate. Include support for newer hardware features (e.g., TMA on NVIDIA GPUs) and precision variants (FP16, FP8) by selecting appropriate tensor layouts and data types dynamically per GEMM group. This approach reduces kernel launch overhead for multiple matrix multiplications, improves resource utilization via workload balancing, and generalizes classical tiled matrix multiplication kernels to efficiently batch diverse GEMMs in a single kernel invocation.",
+            "variations": [],
+            "expansions": []
+        }
+    ],
+    "edge_cases_and_pitfalls": [],
+    "meta_reasoning": [
+        {
+            "id": "e3a9f84c",
+            "content": "Apply high-level device property queries (e.g., counts of multiprocessors, registers, shared memory size, warp size) at runtime to guide empirical tuning of kernel launch configurations and occupancy, balancing register pressure, shared memory usage, and thread concurrency to optimize throughput without explicit user intervention.",
+            "variations": [],
+            "expansions": []
+        }
+    ]
+}

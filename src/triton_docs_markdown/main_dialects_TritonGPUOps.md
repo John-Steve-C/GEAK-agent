@@ -1,0 +1,746 @@
+# TritonGPUOps¶
+
+## `ttg.async_commit_group` (triton::gpu::AsyncCommitGroupOp)¶
+
+_Commit pending async copies into an async group that can be waited on_
+
+Syntax:
+    
+    
+    operation ::= `ttg.async_commit_group` (`tokens` $inputTokens^)? attr-dict
+    
+
+Closes the current batch of async_copy_* operations and allows for them to be waited on with `ttg.async_wait`. This is required in order to ensure async copy operations can be waited on.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+Interfaces: `InferTypeOpInterface`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`inputTokens` | variadic of async token type  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`asyncToken` | async token type  
+  
+## `ttg.async_copy_global_to_local` (triton::gpu::AsyncCopyGlobalToLocalOp)¶
+
+_Copy data from global memory to local memory asynchronously_
+
+Syntax:
+    
+    
+    operation ::= `ttg.async_copy_global_to_local` $src `,` $result (`mask` $mask^)? (`other` $other^)?
+                  oilist(`cacheModifier` `=` $cache | `evictionPolicy` `=` $evict)
+                  attr-dict `:` type($src) `->` type($result)
+    
+
+This operation copies data from global memory to local memory asynchronously. This is analogue to `tt.load` except the data are copied to local memory pointed to by the memory descriptor instead of a distributed tensor. The rest of the operands are the same as `tt.load`. Contiguity is the maximum number of elements that can be loaded in a single vector with the given layout and mask. This allows op to use `async_copy_global_to_local` even if the alignment cannot be proven based on IR.
+
+The data will only be available in local memory after `ttg.async_wait` is issued to wait on the completion of `async_copy_global_to_local`. The async copy operations must be committed using `ttg.async_commit_group` to close the batch and allow for them to be waited on.
+
+Traits: `AttrSizedOperandSegments`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `InferTypeOpInterface`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`cache`| ::mlir::triton::CacheModifierAttr| allowed 32-bit signless integer cases: 1, 2, 3, 4, 5, 6, 7  
+`evict`| ::mlir::triton::EvictionPolicyAttr| allowed 32-bit signless integer cases: 1, 2, 3  
+`isVolatile`| ::mlir::BoolAttr| bool attribute  
+`contiguity`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | ranked tensor of ptr values  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+`mask` | tensor of 1-bit signless integer values  
+`other` | floating-point or ranked tensor of floating-point values or integer or ranked tensor of integer values or ptr or ranked tensor of ptr values or ptr  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`token` | async token type  
+  
+## `ttg.async_wait` (triton::gpu::AsyncWaitOp)¶
+
+_Ensure all specified async_copy_ * operations are complete._
+
+Syntax:
+    
+    
+    operation ::= `ttg.async_wait` ($asyncToken^)? attr-dict
+    
+
+The `async_wait` op waits until at most “num” async copy groups are outstanding without synchronising CTA execution. It takes zero or more `asyncToken` plus an integer `num` that specifies how many async copy groups can remain outstanding after the `async_wait` op is completed. `num = 0` waits until all groups of async copies are complete.
+
+This operation does not provide any syncronisation in the CTA, if syncronisation is needed use `ttg.local_barrier` in addition to this operation.
+
+Traits: `MemWaitOpTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `InferTypeOpInterface`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`num`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`asyncToken` | variadic of async token type  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`retToken` | async token type  
+  
+## `ttg.convert_layout` (triton::gpu::ConvertLayoutOp)¶
+
+_Convert layout_
+
+Syntax:
+    
+    
+    operation ::= `ttg.convert_layout` $src attr-dict `:` type($src) `->` type($result)
+    
+
+Traits: `AlwaysSpeculatableImplTrait`, `SameOperandsAndResultElementType`, `SameOperandsAndResultShape`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | ranked tensor of floating-point or integer or ptr values  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | ranked tensor of floating-point or integer or ptr values  
+  
+## `ttg.fp4_to_fp` (triton::gpu::Fp4ToFpOp)¶
+
+_Upcast fp4 (e2m1) to fp_
+
+Syntax:
+    
+    
+    operation ::= `ttg.fp4_to_fp` $src attr-dict `:` type($src) `->` type($result)
+    
+
+Upcast fp4 (e2m1) represented packed as i8s to fp.
+
+The lower 4 bits of the i8s represent the first fp4 element, and the upper 4 bits the second fp4 element.
+
+The `axis` attribute specifies the axis along which the fp4 elements are packed.
+
+Traits: `AlwaysSpeculatableImplTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`axis`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | ranked tensor of 8-bit signless integer values  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | ranked tensor of floating-point values  
+  
+## `ttg.global_scratch_alloc` (triton::gpu::GlobalScratchAllocOp)¶
+
+_Allocate a global memory buffer_
+
+Syntax:
+    
+    
+    operation ::= `ttg.global_scratch_alloc` attr-dict `:` qualified(type($result))
+    
+
+This operation allocates a buffer in global memory that is private to the current program.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`nbytes`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+`alignment`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | ptr  
+  
+## `ttg.local_alloc` (triton::gpu::LocalAllocOp)¶
+
+_Allocate tensor_
+
+Syntax:
+    
+    
+    operation ::= `ttg.local_alloc` ($src^)? attr-dict `:` functional-type(operands, results)
+    
+
+This operation allocates buffer in shared memory and return a descriptor containing the address and a view of the buffer.
+
+Explicitly deallocating a buffer is optional; see local_dealloc.
+
+The `src` operand is an optional initializer for the allocated buffer. It must have the element type as the buffer. If `src` is not specified, the returned buffer must be mutable.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+Interfaces: `MemoryEffectOpInterface`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`alignment`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | ranked tensor of floating-point or integer or ptr values  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.local_barrier` (triton::gpu::LocalBarrierOp)¶
+
+_Synchronizes execution and shared memory reads/writes for all threads in a CTA._
+
+Syntax:
+    
+    
+    operation ::= `ttg.local_barrier` attr-dict
+    
+
+The `local_barrier` op synchronizes the execution and all operations between shared memory and registers for all threads in a CTA. It is used to coordinate communication between the threads of the CTA.
+
+This operation waits until all threads in the CTA have reached a `local_barrier` and operations between shared memory and registers made by these threads prior to the op are visible to all threads in the CTA.
+
+Data hazards between threads accessing the same memory can be avoided by synchronizing the CTA in-between these accesses with a `local_barrier`.
+
+A `local_barrier` operation does not provide syncronization guarantees on global memory.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+## `ttg.local_dealloc` (triton::gpu::LocalDeallocOp)¶
+
+_Dealloc buffer_
+
+Syntax:
+    
+    
+    operation ::= `ttg.local_dealloc` $src attr-dict `:` qualified(type($src))
+    
+
+This operation deallocates a buffer explicitly. Using the buffer after this operation is undefined.
+
+This operation is optional. If you don’t explicitly dealloc a buffer, the compiler assumes it’s deallocated at the first point that post-dominates all uses of the alloc.
+
+Because we assume a memdesc is dead at the first point that post-dominates its uses, ops that wait for an async operation on a memdesc to complete (such as ttng.warp_group_dot_wait) should also take the memdesc as an operand.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.local_load` (triton::gpu::LocalLoadOp)¶
+
+_Load a buffer from local memory into a distributed tensor_
+
+Syntax:
+    
+    
+    operation ::= `ttg.local_load` $src (`token` $token^)? attr-dict `:` qualified(type($src)) `->` type($result)
+    
+
+Load a tensor from the local memory descriptor into a distributed tensor.
+
+Traits: `LocalLoadTrait`, `VerifyTensorLayoutsTrait`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+`token` | async token type  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | ranked tensor of floating-point or integer or ptr values  
+  
+## `ttg.local_store` (triton::gpu::LocalStoreOp)¶
+
+_Store a distributed tensor into a buffer in local memory_
+
+Syntax:
+    
+    
+    operation ::= `ttg.local_store` $src `,` $dst attr-dict `:` type($src) `->` qualified(type($dst))
+    
+
+Store a distributed tensor into a buffer in local memory.
+
+Traits: `VerifyTensorLayoutsTrait`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | ranked tensor of floating-point or integer or ptr values  
+`dst` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.mask` (triton::gpu::MaskOp)¶
+
+_Mask op for pipelining_
+
+Traits: `SingleBlock`, `VerifyTensorLayoutsTrait`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`pred` | 1-bit signless integer  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | variadic of any type  
+  
+## `ttg.mask.return` (triton::gpu::MaskReturnOp)¶
+
+_Terminator for mask operator_
+
+Syntax:
+    
+    
+    operation ::= `ttg.mask.return` $result attr-dict `:` type($result)
+    
+
+Traits: `AlwaysSpeculatableImplTrait`, `HasParent<MaskOp>`, `ReturnLike`, `Terminator`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`, `RegionBranchTerminatorOpInterface`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`result` | variadic of any type  
+  
+## `ttg.memdesc_index` (triton::gpu::MemDescIndexOp)¶
+
+_Take a subview of the descriptor._
+
+Syntax:
+    
+    
+    operation ::= `ttg.memdesc_index` $src `[` $index `]` attr-dict `:` qualified(type($src)) `->` qualified(type($result))
+    
+
+This operation returns a new descriptor pointing to the `i`-th element of the input descriptor along the 0-th dimension.
+
+It doesn’t affect the underlying memory.
+
+For example, suppose that
+
+  * the input shape is 2x4x16xf16,
+
+  * the output shape is 4x16xf16, and
+
+  * index = 1. Then the output descriptor is equivalent to input[1], where input is the logical tensor.
+
+
+
+
+Traits: `AlwaysSpeculatableImplTrait`, `MemDescViewTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+`index` | 32-bit signless integer  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.memdesc_reinterpret` (triton::gpu::MemDescReinterpretOp)¶
+
+_Reinterpret a memory descriptor as a different type and shape_
+
+Syntax:
+    
+    
+    operation ::= `ttg.memdesc_reinterpret` $src attr-dict `:` qualified(type($src)) `->` qualified(type($result))
+    
+
+The `ttg.memdesc_reinterpret` operation reinterprets a memory descriptor as one with a different shape and element type. Because memory descriptors lack strides, this operation is only valid if the original memory descriptor is contiguous.
+
+Traits: `AlwaysSpeculatableImplTrait`, `MemDescViewTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.memdesc_reshape` (triton::gpu::MemDescReshapeOp)¶
+
+_Creates a descriptor for the new shape_
+
+Syntax:
+    
+    
+    operation ::= `ttg.memdesc_reshape` $src attr-dict `:` qualified(type($src)) `->` qualified(type($result))
+    
+
+This operation returns a new descriptor representing a reshaped view of the underlying buffer. This doesn’t affect the memory.
+
+Traits: `AlwaysSpeculatableImplTrait`, `MemDescViewTrait`, `SameOperandsAndResultElementType`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.memdesc_subslice` (triton::gpu::MemDescSubsliceOp)¶
+
+_Take a subview of the descriptor._
+
+Syntax:
+    
+    
+    operation ::= `ttg.memdesc_subslice` $src `[` custom<Offsets>($offsets) `]` attr-dict `:` qualified(type($src))
+                  `->` qualified(type($result))
+    
+
+This operation returns a new descriptor representing a subview of the logical tensor. It doesn’t affect the underlying memory.
+
+For example, suppose that
+
+  * the input shape is 32x16xf16,
+
+  * the output shape is 8x16xf16, and
+
+  * offsets = [2, 1]. Then in Python syntax, the subview covers input[2:8+2, 1:16+1] where input is the logical tensor.
+
+
+
+
+The offsets must be larger or equal to the tile of the tensor (or zero).
+
+Traits: `AlwaysSpeculatableImplTrait`, `MemDescViewTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`offsets`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.memdesc_trans` (triton::gpu::MemDescTransOp)¶
+
+_Transpose the descriptor_
+
+Syntax:
+    
+    
+    operation ::= `ttg.memdesc_trans` $src attr-dict `:` qualified(type($src)) `->` qualified(type($result))
+    
+
+This operation returns a new descriptor representing a transposed view of the buffer.
+
+Traits: `AlwaysSpeculatableImplTrait`, `InferTypeOpAdaptor`, `MemDescViewTrait`, `SameOperandsAndResultElementType`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `InferTypeOpInterface`, `NoMemoryEffect (MemoryEffectOpInterface)`, `TransposeOpInterface`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`order`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`src` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+## `ttg.predicate_stage` (triton::gpu::PredicateStageOp)¶
+
+_Pipeliner stage predicate_
+
+Syntax:
+    
+    
+    operation ::= `ttg.predicate_stage` $iv `,` $ub `,` $step `maxStage` $maxStage `stage` $stage attr-dict `:` type($iv) `->` type($result)
+    
+
+Traits: `AlwaysSpeculatableImplTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `InferTypeOpInterface`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`maxStage`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+`stage`| ::mlir::IntegerAttr| 32-bit signless integer attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`iv` | signless integer or index  
+`ub` | signless integer or index  
+`step` | signless integer or index  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | 1-bit signless integer  
+  
+## `ttg.warp_id` (triton::gpu::WarpIdOp)¶
+
+_Return the GPU warp ID_
+
+Syntax:
+    
+    
+    operation ::= `ttg.warp_id` attr-dict
+    
+
+This operation returns the GPU warp ID. This can translate to reading hardware registers if there are, or just thread ID divided by warp size.
+
+The `omitUniformHint` attribute is indicating in NVIDIA backend whether to omit emitting nvvm.shfl.sync idx 0 for LLVM.
+
+Traits: `AlwaysSpeculatableImplTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `InferTypeOpInterface`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`omitUniformHint`| ::mlir::UnitAttr| unit attribute  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | 32-bit signless integer  
+  
+## `ttg.warp_return` (triton::gpu::WarpReturnOp)¶
+
+_Implicit terminator from partition regions_
+
+Syntax:
+    
+    
+    operation ::= `ttg.warp_return` attr-dict
+    
+
+The `ttg.warp_return` operation is the implicit terminator that ends the partition regions of a `ttg.warp_specialize` op. It has no operands as these regions cannot return anything.
+
+TODO: Support returning uniform values from partition regions.
+
+Traits: `AlwaysSpeculatableImplTrait`, `HasParent<WarpSpecializePartitionsOp>`, `ReturnLike`, `Terminator`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`, `RegionBranchTerminatorOpInterface`
+
+Effects: `MemoryEffects::Effect{}`
+
+## `ttg.warp_specialize` (triton::gpu::WarpSpecializeOp)¶
+
+_Asynchronously execute code on multiple warpgroups_
+
+The `ttg.warp_specialize` op represents executing different code simultaneously on different warp groups. A warp group is a group of power-of-2 warps, which can be a different number of warps than in the enclosing region.
+
+The “default” region of the op represents the code executed by the currently executing warp group. This region is allowed to implicitly capture. The op contains a number of “partition” regions that are isolated from above. They must be isolated because these regions represent different layout domains, as the number of warps is different.
+
+Semantically, execution of each region starts simultaneously for each warp group, and all warp groups are joined at the end of the op.
+
+Example:
+    
+    
+    %0 = ttg.warp_specialize(%a, %b)
+    default {
+      %out = some_operation(%a) // implicit capture of `%a`
+      ttg.warp_yield %out : i32
+    }
+    partition0(%arg0: i32, %arg1: i32) num_warps(8) {
+      some_async_dispatch(%arg0, %arg1)
+      ttg.warp_return
+    }
+    partition1(%arg0: i32, %arg1: i32) num_warps(1) {
+      some_async_dispatch(%arg0, %arg1)
+      ttg.warp_return
+    } : (i32, i32) -> i32
+    
+
+Traits: `AsyncRegions`, `RecursiveMemoryEffects`, `RecursivelySpeculatableImplTrait`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `RegionBranchOpInterface`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`partitionNumWarps`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+`warpGroupStartIds`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+`requestedRegisters`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+`actualRegisters`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`explicitCaptures` | variadic of any type  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`defaultPassthrough` | variadic of any type  
+  
+## `ttg.warp_specialize.partitions` (triton::gpu::WarpSpecializePartitionsOp)¶
+
+_Container op for` ttg.warp_specialize`_
+
+Because MLIR requires entire operations be isolated from above, this op contains the actual isolated from above regions of `ttg.warp_specialize`.
+
+Traits: `HasParent<WarpSpecializeOp>`, `IsolatedFromAbove`, `RecursiveMemoryEffects`, `RecursivelySpeculatableImplTrait`, `Terminator`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `RegionBranchOpInterface`
+
+## `ttg.warp_yield` (triton::gpu::WarpYieldOp)¶
+
+_Yield from the default region of` ttg.warp_specialize`_
+
+Syntax:
+    
+    
+    operation ::= `ttg.warp_yield` ($values^)? attr-dict (`:` type($values)^)?
+    
+
+The `ttg.warp_yield` operation is the terminator for the “default” region of a `ttg.warp_specialize` operation. The operands are passed transparently as the SSA results of the `ttg.warp_specialize` operation.
+
+Example:
+    
+    
+    ttg.warp_yield %a, %b : i32, tensor<32xbf16, #blocked>
+    
+
+Traits: `AlwaysSpeculatableImplTrait`, `HasParent<WarpSpecializeOp>`, `ReturnLike`, `Terminator`, `VerifyTensorLayoutsTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`, `RegionBranchTerminatorOpInterface`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`values` | variadic of any type

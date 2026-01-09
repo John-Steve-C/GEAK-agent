@@ -1,0 +1,138 @@
+# TritonInstrumentOps¶
+
+## `tti.experimental_assert_in_thread` (triton::instrument::ExperimentalAssertInThreadOp)¶
+
+_Assert the condition within the current thread_
+
+Syntax:
+    
+    
+    operation ::= `tti.experimental_assert_in_thread` $condition `,` $message attr-dict `:` type($condition)
+    
+
+Assert that the condition is true given all the values are available in the current thread. If the condition is false, the message is printed, and the program is aborted. If check_any is true, any of the values in the condition must be true. Otherwise, all the values in the condition must be true.
+
+Interfaces: `MemoryEffectOpInterface (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{MemoryEffects::Write on ::mlir::triton::GlobalMemory}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`message`| ::mlir::StringAttr| string attribute  
+`check_any`| ::mlir::BoolAttr| bool attribute  
+  
+### Operands:¶
+
+Operand | Description  
+---|---  
+`condition` | 1-bit signless integer or tensor of 1-bit signless integer values  
+  
+## `tti.experimental_buffer_descriptors` (triton::instrument::ExperimentalBufferDescriptorsOp)¶
+
+_Define an array of buffer descriptors_
+
+Syntax:
+    
+    
+    operation ::= `tti.experimental_buffer_descriptors` $offsets `,` $lengths `,` $memType attr-dict `:` type($result)
+    
+
+Create a tensor of buffer descriptors packing 32-bit pointer offsets and 32-bit lengths into 64-bit elements.
+
+Traits: `AlwaysSpeculatableImplTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Attributes:¶
+
+Attribute| MLIR Type| Description  
+---|---|---  
+`offsets`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+`lengths`| ::mlir::DenseI32ArrayAttr| i32 dense array attribute  
+`memType`| ::mlir::triton::instrument::MemTypeAttr| allowed 32-bit signless integer cases: 0, 1  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | ranked tensor of floating-point or integer or ptr values  
+  
+## `tti.experimental_lock_acquire` (triton::instrument::ExperimentalLockAcquireOp)¶
+
+_Acquire a lock._
+
+Syntax:
+    
+    
+    operation ::= `tti.experimental_lock_acquire` $lock (`,` $pred^)? attr-dict `:` type($lock)
+    
+
+Enter a critical section by acquiring a lock with single thread.
+
+Interfaces: `MemoryEffectOpInterface (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{MemoryEffects::Write on ::mlir::triton::GlobalMemory}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`lock` | ptr or ranked tensor of ptr values  
+`pred` | 1-bit signless integer  
+  
+## `tti.experimental_lock_release` (triton::instrument::ExperimentalLockReleaseOp)¶
+
+_Release a lock._
+
+Syntax:
+    
+    
+    operation ::= `tti.experimental_lock_release` $lock (`,` $pred^)? attr-dict `:` type($lock)
+    
+
+Leave a critical section by releasing a lock with single thread.
+
+Interfaces: `MemoryEffectOpInterface (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{MemoryEffects::Write on ::mlir::triton::GlobalMemory}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`lock` | ptr or ranked tensor of ptr values  
+`pred` | 1-bit signless integer  
+  
+## `tti.experimental_memdesc_to_i32` (triton::instrument::ExperimentalMemDescToI32Op)¶
+
+_Convert a memdesc into its base pointer as i32_
+
+Syntax:
+    
+    
+    operation ::= `tti.experimental_memdesc_to_i32` $memdesc attr-dict `:` type($memdesc)
+    
+
+Extract the base pointer from the given memdesc and return it as a 32-bit integer. This can be used to compare the memdesc against tensors of barrier pointers maintained by the concurrency sanitizer.
+
+Traits: `AlwaysSpeculatableImplTrait`
+
+Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
+
+Effects: `MemoryEffects::Effect{}`
+
+### Operands:¶
+
+Operand | Description  
+---|---  
+`memdesc` | memory descriptor type (`::mlir::triton::gpu::MemDescType`) in Triton IR type system  
+  
+### Results:¶
+
+Result | Description  
+---|---  
+`result` | 32-bit signless integer

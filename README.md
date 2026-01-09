@@ -1,3 +1,10 @@
+# Note
+
+This repo is based on the [GEAK-agent-v1](https://github.com/AMD-AGI/GEAK-agent/tree/GEAK-v1). And so far I add two major changes:
+
+1. add a embedding-based retriever
+2. add a cheatsheet
+
 ## Technical report [![arXiv](https://img.shields.io/badge/arXiv-2507.23194-b31b1b.svg)](https://arxiv.org/abs/2507.23194)
 
 ## Introduction

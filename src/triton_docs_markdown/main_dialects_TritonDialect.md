@@ -1,0 +1,69 @@
+# ‘tt’ Dialect¶  
+  
+_The Triton IR in MLIR_
+
+Triton Dialect.
+
+Dependent Dialects:
+
+  * Arith:
+
+    * addf, addi, andi, cmpf, cmpi, divf, fptosi, …
+
+  * Math:
+
+    * exp, sin, cos, log, …
+
+  * StructuredControlFlow:
+
+    * for, if, while, yield, condition
+
+  * ControlFlow:
+
+    * br, cond_br
+
+
+
+
+[TOC]
+
+## Type constraints¶
+
+### ptr¶
+
+### ptr¶
+
+## Types¶
+
+### PointerType¶
+
+_Pointer type (` ::mlir::triton::PointerType`) in Triton IR type system_
+
+Pointer type in Triton IR type system, which could be pointing to scalars or tensors.
+
+#### Parameters:¶
+
+Parameter | C++ type | Description  
+---|---|---  
+pointeeType | `Type` |   
+addressSpace | `int` |   
+  
+### TensorDescType¶
+
+_Tensor descriptor type (` ::mlir::triton::TensorDescType`) in Triton IR type system_
+
+Syntax:
+    
+    
+    !tt.tensordesc<
+      RankedTensorType   # blockType
+    >
+    
+
+A portable abstraction for nvidia-TMA descriptors.
+
+#### Parameters:¶
+
+Parameter | C++ type | Description  
+---|---|---  
+blockType | `RankedTensorType` | 

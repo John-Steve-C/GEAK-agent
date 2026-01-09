@@ -17,9 +17,9 @@ perf_ref_folder: null
 perf_G_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G"
 py_interpreter: "python"
 result_path: null
-mem_file: null # "../outputs/split_embed_optimagent_gpt41_mini_mem_0.json"
+mem_file: null # "../outputs/test/optimagent_gpt41_mini_init_reflect_serial_dc_mem_0.json"
 start_iter: 0
-datalen: 20
+datalen: null
 start_idx: 0
 target_kernels: null
 
@@ -27,8 +27,12 @@ target_kernels: null
 # output_path: "../outputs/split_embed_optimagent_gpt41_mini.jsonl"
 # output_path: "../outputs/test/true_embed_optimagent_gpt41_mini.jsonl"
 # output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
-output_path: "../outputs/test/optimagent_gpt41_mini.jsonl"
-max_iteration: 10
+# output_path: "../outputs/test/optimagent_gpt41_mini_init_reflect_serial_dc.jsonl"
+# output_path: "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc.jsonl"
+output_path: "../outputs/test/optimagent_gpt41_mini_init_reflect_dc.jsonl"
+
+
+max_iteration: 5
 multi_thread: true
 thread_num: 128
 ancestor_num: 5

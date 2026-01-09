@@ -16,6 +16,23 @@ def save_jsonl(data, file_path):
         for item in data:
             f.write(json.dumps(item) + '\n')
 
+def fix_truncated_json(filepath, output_path):
+    with open(filepath, 'rb') as f:
+        content = f.read().strip()
+        
+        # Look for the last successfully closed object
+        last_bracket = content.rfind(b'}')
+        if last_bracket != -1:
+            # Keep everything up to the last closing brace and add the closing list bracket
+            fixed_content = content[:last_bracket+1] + b']'
+            with open(output_path, 'wb') as out:
+                out.write(fixed_content)
+            print(f"Fixed file saved to {output_path}")
+        else:
+            print("Could not find a valid closing brace.")
+
+# fix_truncated_json('../outputs/test/optimagent_gpt41_mini_init_answer_serial_dc_mem_1.json', 'fixed_file.json')
+
 if __name__ == "__main__":
 
     # root = "../outputs/optimagent_gpt41_mini_mem"
@@ -24,8 +41,8 @@ if __name__ == "__main__":
 
     # root = "../outputs/split_embed_optimagent_gpt41_mini_mem"
 
-    root = "../outputs/test/embed_optimagent_gpt41_mini_mem"
-    root_2 = "../outputs/test/true_embed_optimagent_gpt41_mini_mem"
+    root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
+    root_2 = "../outputs/test/optimagent_gpt41_mini_answer_serial_dc_mem"
 
     # embed_full = load_json("retrievers/parsed_corpus_embeddings_ordered.json")
     # embed_split = load_json("retrievers/parsed_corpus_embeddings_split_ordered.json")
@@ -70,21 +87,22 @@ if __name__ == "__main__":
         data_next = load_json(f'{root}_{iter+1}.json') 
 
         for idx, key in enumerate(data):
-            if idx >= 20:
-                break
+            # if idx >= 20:
+            #     break
             # filter failed examples
-            # if data[key]["pass_exe"] and not data_next[key]["pass_exe"]:
-            #     failed_examples.append({
-            #         "file_name": key,
-            #         "solution": data[key],
-            #         "failed_response": data_next[key],
-            #         "failed_iter": iter + 1
-            #     })
-            #     print(key, iter + 1)
-            #     # print("==================================Solution: \n", data[key]["exe_candidate"])
-            #     # print("==================================Failed response: \n", data_next[key]["exe_candidate"])
-            #     if data[key]["oneshot"] == data_next[key]["oneshot"]:
-            #         print("Same oneshot prompt")
+            if data[key]["pass_exe"] and not data_next[key]["pass_exe"]:
+                failed_examples.append({
+                    "file_name": key,
+                    "solution": data[key],
+                    "failed_response": data_next[key],
+                    "failed_iter": iter + 1
+                })
+                print(key, iter + 1)
+                print(data_2[key]['reflection'])
+                # print("==================================Solution: \n", data[key]["exe_candidate"])
+                # print("==================================Failed response: \n", data_next[key]["exe_candidate"])
+                # if data[key]["oneshot"] == data_next[key]["oneshot"]:
+                #     print("Same oneshot prompt")
                 
             # filter passed examples
             # if not data[key]["pass_exe"] and data_next[key]["pass_exe"]:
@@ -120,12 +138,12 @@ if __name__ == "__main__":
             #     })
 
             # check same example
-            if data[key]["oneshot"] == data_2[key]["oneshot"]:
-                # print(f"Same oneshot prompt at iter {iter} for {key}")
-                cnt += 1
+            # if data[key]["oneshot"] == data_2[key]["oneshot"]:
+            #     # print(f"Same oneshot prompt at iter {iter} for {key}")
+            #     cnt += 1
         
-        if cnt == 20:
-            print(f"All examples have the same oneshot prompt at iter {iter}")
+        # if cnt == 20:
+        #     print(f"All examples have the same oneshot prompt at iter {iter}")
     # with open(f"{root}_failed_examples.json", "w") as f:
     #     json.dump(failed_examples, f, indent=4)
 

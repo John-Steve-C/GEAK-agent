@@ -29,7 +29,7 @@ def main():
     # run the agent
     agent.run(output_path=args.output_path, 
               multi_thread=args.multi_thread,
-              thread_num=args.thread_num,
+            #   thread_num=args.thread_num,
               iteration_num=args.max_iteration, 
               temperature=args.temperature, 
               datalen=args.datalen,

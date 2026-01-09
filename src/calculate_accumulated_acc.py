@@ -24,7 +24,12 @@ if __name__ == "__main__":
     # root = "../outputs/test/embed_optimagent_gpt41_mini_mem"
     # root = "../outputs/test/compare_split_embed_optimagent_gpt41_mini_mem"
     # root = "../outputs/test/true_embed_optimagent_gpt41_mini_mem"
-    root = "../outputs/full/optimagent_gpt41_mini_mem"
+    
+    # root = "../outputs/test/optimagent_gpt41_mini_pipeline_dc_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_serial_dc_mem"
+    root = "../outputs/test/optimagent_gpt41_mini_init_answer_dc_mem"
 
     flag_pass_exe = [0] * 184   # total 184 samples
     solutions = [None] * 184
@@ -56,7 +61,7 @@ if __name__ == "__main__":
 
         acc = sum(flag_pass_exe) / len(flag_pass_exe)
         accum_acc.append(acc)
-        print(f"iter {iter}, acc: {acc:.4f}")
+        print(f"iter {iter}, acc: {acc:.4f}, number passed: {sum(flag_pass_exe)}")
     
     input("Press Enter to save final results...")
 

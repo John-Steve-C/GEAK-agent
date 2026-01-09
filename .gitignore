@@ -8,5 +8,7 @@ src/retrievers/parsed_corpus_embeddings_split_ordered_whole.json
 src/tmp_*
 src/tmp_output_for_code_retrieve.json
 
+src/triton_example_codes
+
 outputs/
 inject_api_key.sh
