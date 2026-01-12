@@ -29,7 +29,7 @@ if __name__ == "__main__":
     # root = "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc_mem"
     # root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
     # root = "../outputs/test/optimagent_gpt41_mini_serial_dc_mem"
-    root = "../outputs/test/optimagent_gpt41_mini_init_answer_dc_mem"
+    root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_mem"
 
     flag_pass_exe = [0] * 184   # total 184 samples
     solutions = [None] * 184

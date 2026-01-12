@@ -240,6 +240,94 @@ RESPONSE FORMAT (JSON ONLY):
             model_reflection=model_reflection
         )
     
+    def build_prompt(self, question: str, model_answer: str, model_reflection: str) -> str:
+        """Constructs the final prompt using the user's template."""
+        
+        # This is the template provided in your description
+        template = """
+You are a master curator of long-term technical knowledge. Your task is to determine what new or refined insights should be added to an existing cheatsheet based on the model’s latest answer.
+
+**Context:**
+- The cheatsheet serves as long-term memory to help solve future, similar questions.
+- The current model answer reflects reasoning that may not be available later, so extracted insights must be generalized and reusable.
+- The cheatsheet prioritizes high-level natural-language descriptions over concrete code.
+
+**CRITICAL: You MUST respond with valid JSON only. Do not use markdown, code blocks, or extra text.**
+
+**Instructions:**
+- Review the existing cheatsheet and the current model answer.
+- Identify ONLY new, missing, or improved insights that should be added or merged.
+- Avoid redundancy: if a similar strategy already exists, extend or vary it instead of duplicating.
+- Do NOT regenerate the full cheatsheet.
+- Prefer clarity and abstraction over detail.
+- Describe logic at a high level; do not store code snippets.
+- Copying unrelated items is handled by the system—ONLY specify updates.
+
+**Token Budget Rules:**
+- Target total cheatsheet length ≈ 10,000 tokens.
+- If the cheatsheet exceeds the budget, older or low-usage items may be summarized or refined.
+- Do not propose deletions unless an item is incorrect or strictly superseded.
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+**Previous Cheatsheet:**
+{previous_cheatsheet}
+
+**Current Question:**
+{question}
+
+**Model Answer:**
+{model_answer}
+
+**Model Reflection:**
+{model_reflection}
+
+**Your Task:**
+Output ONLY a valid JSON object with these exact fields:
+- reasoning: brief justification for adding or not adding content
+- operations: list of operations to apply to the cheatsheet
+
+Available Operations:
+1. ADD
+   - section: one of [solutions_and_patterns, edge_cases_and_pitfalls, meta_reasoning]
+   - content: high-level natural-language strategy, knowledge or insight
+
+2. UPDATE
+   - target_id: memory item identifier
+   - content: refined high-level description
+
+3. VARIATION
+   - target_id: memory item identifier
+   - name: short variant name
+   - content: high-level alternative approach
+
+4. EXPAND
+   - target_id: memory item identifier
+   - content: new edge case or consideration
+
+If no new information should be added, return an empty operations list.
+
+RESPONSE FORMAT (JSON ONLY):
+{{
+  "reasoning": "...",
+  "operations": [
+    {{
+      "type": "ADD",
+      "section": "solutions_and_patterns",
+      "content": "High-level reusable insight..."
+    }}
+  ]
+}}
+"""
+        return template.format(
+            cheatsheet_stats=self.get_stats(),
+            previous_cheatsheet=self.to_string_for_prompt(),
+            question=question,
+            model_answer=model_answer,
+            model_reflection=model_reflection
+        )
+    
     def build_prompt_no_qa(self, raw_prompt) -> str:
         """Constructs the final prompt without Q&A context."""
         

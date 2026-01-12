@@ -5,6 +5,9 @@ Your task is to generate a Python code snippet containing a Triton kernel based 
 
 **Target Platform:** AMD GPU (ROCm)
 
+**Global Cheatsheet:**
+{cheatsheet}
+
 **Request:**
 {instruction}
 

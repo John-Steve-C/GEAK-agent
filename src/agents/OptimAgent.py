@@ -359,6 +359,7 @@ class OptimAgent(Reflexion_Oneshot):
         tab = "\n"
         fss_text = "".join(f"* {sig}{tab}" for sig in mem.function_signatures)
         text = prompt_for_generation.prompt.format(
+            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(),
             instruction=mem.ps.instruction,
             function_signatures=fss_text
         )
@@ -407,7 +408,6 @@ class OptimAgent(Reflexion_Oneshot):
 
             # with self.cheatsheet_lock:
                 # text += f"\nHere is the global cheatsheet: {self.global_cheatsheet}"
-            text += f"\nHere is the global cheatsheet: {self.cheatsheet_manager.to_string_for_prompt()}"
 
         text += "\nOutput your answer in json format, with the format as follows: {\"thought\": \"\", \"code\": \"\"}. Please strictly output in JSON format."
         text += "\nGenerate the correct and optimized code without explanation, which we can run directly in the \"code\" field."
@@ -518,8 +518,9 @@ class OptimAgent(Reflexion_Oneshot):
         if method == "json":
             # mem.reflection or mem.raw_code[0] can be used to build the prompt
             # text = self.cheatsheet_manager.build_prompt_qa(mem.ps.instruction, mem.raw_code[0])
-
-            text = self.cheatsheet_manager.build_prompt_reflect(mem.ps.instruction, mem.reflection)
+            # text = self.cheatsheet_manager.build_prompt_reflect(mem.ps.instruction, mem.reflection)
+            
+            text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
         else:
             current_sheet = self.global_cheatsheet
             if method == "dc_full":
