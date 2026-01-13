@@ -2,37 +2,40 @@ from tqdm import tqdm
 import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 from agents.reflexion_oneshot import Reflexion_Oneshot
 from utils.utils import clear_code, extract_function_signatures, clear_json
 from memories.Memory import MemoryClassMeta
 from prompts import prompt_for_generation, prompt_for_reflection, prompt_for_summarization
 from loguru import logger
 from tenacity import RetryError
-from threading import Lock
-from memories.CheatsheetManager import CheatsheetManager
+import queue
+import threading
+import time
+
+DEBUG = 1
 
 class OptimAgent(Reflexion_Oneshot):
     def __init__(self, model, dataset, corpus_path, max_perf_debug_num=5, mem_file=None):
         super().__init__(model, dataset, corpus_path, mem_file)
         self.max_perf_debug_num = max_perf_debug_num
-        # Lock to protect the shared resource
-        self.cheatsheet_lock = Lock()
-        # a manager to manage cheatsheet updates in json format
-        with open('./first_cheatsheet.json', 'r') as f:
-            cheatsheet_data = json.load(f)
-        self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+
+        # NOTE: use a single owner (updater) for the global cheatsheet
+        self._latest_cheatsheet = ""
+        self._cheat_lock = Lock()            # protect reads/writes to _latest_cheatsheet
+
+        # queue of update tasks: workers push (instruction, code, temperature)
+        self._update_queue = queue.Queue()
+        self._updater_thread = threading.Thread(target=self._cheatsheet_updater_worker, daemon=True)
+        self._updater_thread.start()
 
     def memory_init(self, mem_file=None):
-        """
-        Args:
-            mem_file: previous stored memories, which can be loaded to continue run
-        """
         class Memory(metaclass=MemoryClassMeta, field_names=["ps", 
                                                              "call_err_msg", 
                                                              "exe_err_msg",
                                                              "reflection", 
-                                                             "function_signatures",
-                                                             "global_cheatsheet",
+                                                             "cheat_sheet",
+                                                             "function_signatures", 
                                                              "oneshot", 
                                                              "perf_candidates",
                                                              "perf_strategy",
@@ -64,9 +67,9 @@ class OptimAgent(Reflexion_Oneshot):
                                 call_err_msg=None,
                                 exe_err_msg=None, 
                                 reflection=None, 
-                                function_signatures=fs_mem,
-                                global_cheatsheet="",
-                                oneshot=os_mem["code"], 
+                                cheat_sheet=None,
+                                function_signatures=fs_mem, 
+                                oneshot=os_mem["code"],         # only update mem.oneshot once here
                                 perf_candidates=[],
                                 perf_strategy=None,
                                 raw_code=raw_code,
@@ -84,8 +87,8 @@ class OptimAgent(Reflexion_Oneshot):
                     call_err_msg=input_mem["call_err_msg"],
                     exe_err_msg=input_mem["exe_err_msg"], 
                     reflection=input_mem["reflection"], 
+                    cheat_sheet=input_mem["cheat_sheet"],
                     function_signatures=fs_mem, 
-                    global_cheatsheet=input_mem["global_cheatsheet"],
                     oneshot=input_mem["oneshot"], 
                     perf_candidates=input_mem["perf_candidates"],
                     perf_strategy=input_mem["perf_strategy"],
@@ -108,7 +111,7 @@ class OptimAgent(Reflexion_Oneshot):
                     "call_err_msg": str(mem.call_err_msg),
                     "exe_err_msg": str(mem.exe_err_msg),
                     "reflection": mem.reflection, 
-                    "global_cheatsheet": mem.global_cheatsheet,
+                    "cheat_sheet": mem.cheat_sheet,
                     "oneshot": mem.oneshot, 
                     "perf_candidates": [list(cand) for cand in mem.perf_candidates],
                     "perf_strategy": mem.perf_strategy,
@@ -123,20 +126,14 @@ class OptimAgent(Reflexion_Oneshot):
                 }
                 output_dict[mem.ps.filename] = output
             json.dump(output_dict, f)
-    
-    def run(self, output_path=None, multi_thread=True, datalen=None, iteration_num=0, temperature=0, ancestor_num=2, start_idx=0, gpu_id=0, start_iter=0):
-        """
-        Args:
-            output_path: the folder to store the final result
-            multi_thread: whether use multithreading for generating
-            datalen: for debug, to specify how many data from the dataset you want to use
-            iteration_num: how many iterations you want to run
-            temperature: LLM temperature
-            ancestor_num: how many samples you want to add in the prompt when optimize the code
-            start_idx: start idx of the data rows
-            gpu_id: which gpu you want to use when you test the scripts
-            start_iter: which iteration you want to start with. useful when you load previous result and memory
-        """
+        
+    def get_accuracy(self):
+        call_acc = sum(1 for mem in self.memories if mem.pass_call) / len(self.memories)
+        exe_acc = sum(1 for mem in self.memories if mem.pass_exe) / len(self.memories)
+        perf_acc = sum(1 for mem in self.memories if mem.pass_perf) / len(self.memories)
+        return {"call_acc": call_acc, "exe_acc": exe_acc, "perf_acc": perf_acc}
+        
+    def run(self, output_path=None, multi_thread=True, thread_num=3, datalen=None, iteration_num=0, temperature=0, ancestor_num=2, start_idx=0, gpu_id=0, start_iter=0):
         assert ancestor_num >= 0, f"expect ancestor_num to be larger than 0, but got {ancestor_num}"
         data_len = datalen if datalen else len(self.dataset)
         for iter in range(start_iter, start_iter + iteration_num):
@@ -147,22 +144,21 @@ class OptimAgent(Reflexion_Oneshot):
                 mem_output_path = f"{root}_mem_{iter}.json"
 
             if multi_thread:
-                thread_num = 128
+                thread_num = thread_num
             
             # generate solution
             logger.info(f"\ngenerate solution")
             with tqdm(total=data_len) as pbar:
                 if multi_thread:
-                    
                     with ThreadPoolExecutor(max_workers=thread_num) as executor:
                         futures = {executor.submit(self.generate_solution, mem, temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
                         for future in as_completed(futures):
                             pbar.update(1)
                 else:
-                    for mem in self.memories[start_idx:(start_idx + data_len)]:
+                    for idx, mem in enumerate(self.memories[start_idx:(start_idx + data_len)]):
                         self.generate_solution(mem, temperature=temperature)
                         pbar.update(1)
-            
+
             # run scripts
             logger.info(f"\nrun scripts on gpu")
             if output_path is None or (hasattr(self.dataset, 'rocm_tests') and self.dataset.rocm_tests):
@@ -202,14 +198,10 @@ class OptimAgent(Reflexion_Oneshot):
                     mem.exe_candidate = mem.raw_code[0]
             
             
-            # logger.info(f"Exec passed files: {os.listdir(exe_dir)}")
+            logger.info(f"Exec passed files: {os.listdir(exe_dir)}")
             if not os.listdir(exe_dir):
                 pass
-                # logger.warning(f"No scripts passed correctness checks in iteration {iter}. Skipping performance evaluation.")
             else:
-                # run performance evaluation
-                # This block now only runs if there are files to evaluate.
-                # logger.info("\nrun performance evaluation")
                 perf_results_dict = {}
 
                 if hasattr(self.dataset, 'rocm_tests') and self.dataset.rocm_tests:
@@ -218,7 +210,6 @@ class OptimAgent(Reflexion_Oneshot):
                         gen_perf_folder=perf_result_dir
                     )
                 else:
-                    # TritonBench performance evaluation flow
                     script_dir = os.path.join(tmp_dir, "perf_gen")
                     
                     self.dataset.write_perf_file(
@@ -231,11 +222,7 @@ class OptimAgent(Reflexion_Oneshot):
                         script_dir=script_dir, 
                         log_dir=perf_log_dir
                     )
-                    # For TritonBench, results are on disk, so the dict remains empty.
-                    # The logic below will handle reading from files.
 
-                # get ms and efficiency
-                # logger.info("\nparsing performance results")
                 for mem in tqdm(self.memories[start_idx:(start_idx + data_len)],desc="Performance Evaluation"):
                     if not mem.pass_exe: # Only check performance if correctness passed
                         continue
@@ -243,37 +230,27 @@ class OptimAgent(Reflexion_Oneshot):
                     ms = None
                     efficiency = None
 
-                    # Parse results based on the dataset type
                     if hasattr(self.dataset, 'rocm_tests') and self.dataset.rocm_tests:
-                        # Create a list of memory objects that passed the correctness check
                         passed_mems = [mem for mem in self.memories[start_idx:(start_idx + data_len)] if mem.pass_exe]
-                        
-                        # Convert the performance results dictionary to a list of its values (the dicts with ms, efficiency)
                         perf_results_list = list(perf_results_dict.values())
                         
-                        # Check for size mismatch, which indicates a problem in the pipeline
                         if len(passed_mems) != len(perf_results_list):
                             pass
-                            # logger.error(f"Mismatch in number of passed scripts ({len(passed_mems)}) and performance results ({len(perf_results_list)}). Cannot reliably assign performance metrics.")
                         else:
-                            # Iterate through both lists in parallel
                             for mem, perf_data in zip(passed_mems, perf_results_list):
                                 ms = perf_data.get("ms")
                                 efficiency = perf_data.get("efficiency")
                                 
                                 if ms is not None and efficiency is not None:
-                                    # logger.info(f"Assigning to {mem.ps.filename}: ms={ms}, efficiency={efficiency}")
                                     mem.pass_perf = True
                                     mem.raw_code.extend([ms, efficiency])
                                     mem.ms = ms
                                     mem.efficiency = efficiency
                                 else:
-                                    # logger.warning(f"Incomplete performance data for {mem.ps.filename}: {perf_data}")
                                     mem.pass_perf = False
                                     mem.ms = None
                                     mem.efficiency = None
                     else:
-                        # For TritonBench, read results from files
                         path_gen = os.path.join(perf_result_dir, mem.ps.filename[:-3] + ".json")
                         if not os.path.exists(path_gen):
                             continue
@@ -330,25 +307,15 @@ class OptimAgent(Reflexion_Oneshot):
                 else:
                     mem.ps.solution = mem.raw_code[0]
 
-            # update cheatsheet
-            logger.info(f"\nupdate cheatsheet")
-            with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
-                # if multi_thread:
-                #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
-                #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
-                #         for future in as_completed(futures):
-                #             pbar.update(1)
-                # else:
-                    for mem in self.memories[start_idx:(start_idx + data_len)]:
-                        self.generate_dc(mem, method="json", temperature=temperature)
-                        pbar.update(1)
-            # write intermediate results
-            with open(f"{root}_cheatsheet_{iter}.json", "w") as f:
-                json.dump(self.cheatsheet_manager.data, f, indent=4)
-
             if output_path is not None:
                 self.dataset.write_file(iter_path, start_idx=start_idx, datalen=data_len)
                 self.write_memories(mem_output_path)
+                print("accuracy for call, exec and perf: ", self.get_accuracy())
+                with open(f"{root}_acc.txt", "a") as f:
+                    acc_dict = self.get_accuracy()
+                    f.write(f"Iter {iter}: call_acc={acc_dict['call_acc']}, exe_acc={acc_dict['exe_acc']}, perf_acc={acc_dict['perf_acc']}\n")
+                with open(f"{root}_global_cheatsheet.txt", "a") as f:
+                    f.write(f"Iter {iter}\n{self.get_latest_cheatsheet()}")
 
             os.system(f'rm -rf {exe_dir}')
             os.system(f'rm -rf {perf_result_dir}')
@@ -358,27 +325,17 @@ class OptimAgent(Reflexion_Oneshot):
 
         tab = "\n"
         fss_text = "".join(f"* {sig}{tab}" for sig in mem.function_signatures)
-        # origin version
-        # text = prompt_for_generation.prompt.format(
-        #     instruction=mem.ps.instruction,
-        #     function_signatures=fss_text
-        # )
-        # combine generation with re-ordered cheatsheet
-        text = prompt_for_generation.prompt_reorder.format(
-            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(),
+        text = prompt_for_generation.prompt.format(
             instruction=mem.ps.instruction,
             function_signatures=fss_text
         )
 
-        # for the one that has perf_candidates, and the code generated in this round pass_exe, we need to generate a new code
-        # for the one that has perf_candidates, but the code generated in this round not pass_exe, if the debug_num has exceeds the man_debug_num, then generate a new code
-        # otherwise, go to debug
         if len(mem.perf_candidates) > 0 and (mem.pass_exe or (not mem.pass_exe and mem.perf_debug_num >= self.max_perf_debug_num)):
             mem.perf_debug_num = 0
 
             text += """There are some reference codes(NO.1, NO.2 and so on). The reference codes are arranged in ascending order based on their performance, where lower latencies and higher efficiencies indicate better performance. According to their performance(latency in ms and efficiency in TFLOPS or GB/s) and the corresponding analysis, you need to generate a new code with better performance. You should maintain code correctness during optimization."""
 
-            text +="\nYou can use optimization strategies such as Memory access efficiency, Hardware resource utilization, IR analysis, Assembly analysis, Kernel occupancy, TorchInductor with Triton tuning knobs and Auto-tunable kernel configurations and environment variables."
+            text += "\nYou can use optimization strategies such as Memory access efficiency, Hardware resource utilization, IR analysis, Assembly analysis, Kernel occupancy, TorchInductor with Triton tuning knobs and Auto-tunable kernel configurations and environment variables."
 
             for i, cand in enumerate(mem.perf_candidates):
                 text += f"\nreference code: {cand[0]}"
@@ -393,7 +350,11 @@ class OptimAgent(Reflexion_Oneshot):
             if not mem.raw_code or mem.raw_code[0] == "":
                 text += f"\nHere is an example snippet of code: {mem.oneshot}"
             else:
-                one_shot = self.code_retriever.query(mem.raw_code[0])[0]["code"]
+                ret = self.code_retriever.query(mem.raw_code[0])[0]
+                one_shot = ret["code"]
+
+                mem.oneshot = one_shot  
+
                 text += f"\nHere is an example snippet of code: {one_shot}"
                 text += f"\nPrevious attempt implementation:{mem.raw_code[0]}"
                 
@@ -408,12 +369,10 @@ class OptimAgent(Reflexion_Oneshot):
                 if len(mem.perf_candidates) > 0:
                     mem.perf_debug_num += 1
             
-            
-            if mem.reflection:
-                text += f"\nReflection on previous attempt:{mem.reflection}"
-
-            # with self.cheatsheet_lock:
-                # text += f"\nHere is the global cheatsheet: {self.global_cheatsheet}"
+            # IMPORTANT: fetch latest snapshot _just before_ calling the LLM
+            latest = self.get_latest_cheatsheet()
+            if latest:
+                text += f"\nHere is the global cheat sheet: {latest}"
 
         text += "\nOutput your answer in json format, with the format as follows: {\"thought\": \"\", \"code\": \"\"}. Please strictly output in JSON format."
         text += "\nGenerate the correct and optimized code without explanation, which we can run directly in the \"code\" field."
@@ -423,36 +382,96 @@ class OptimAgent(Reflexion_Oneshot):
         ]
 
         try:
-            response = self.model.generate(msg, temperature=temperature, max_tokens=15000)
-        except:
+            response = self.model.generate(msg, temperature=temperature, max_tokens=5000)
+        except Exception as e:
             logger.info(f"failed to call LLM for {mem.ps.filename}")
+            logger.info(f"Exception happened in calling LLM: {e}")
             response = {"code": ""}
-            
+        
         try:
             mem.raw_code = [clear_code(clear_json(response)["code"])]
         except:
             print(f"failed to extract code for {mem.ps.filename}")
-            # fail_dir = "failed_to_extract"
-            # fail_path = os.path.join(fail_dir, mem.ps.filename)
-            # os.makedirs(fail_dir, exist_ok=True)
-
-            # with open(fail_path, "w") as f:
-            #     f.write(response)
-
             raw_code = response.split("\"code\":")[1]
             raw_code = raw_code.split("}")[0]
             mem.raw_code = [clear_code(raw_code)]
-        # finally:
         
         if mem.raw_code[0] is None or mem.raw_code is None:
             print(f"raw code for {mem.ps.filename} is None")
             mem.raw_code = [""]
 
+        # enqueue an update request instead of calling model.generate while holding a lock
+        self.enqueue_cheatsheet_update(mem, temperature)
+
         mem.pass_call = False
         mem.pass_exe = False
         mem.pass_perf = False
 
-        return
+        return mem
+
+    # enqueue update task (non-blocking)
+    def enqueue_cheatsheet_update(self, mem, temperature):
+        try:
+            self._update_queue.put_nowait((mem.ps.instruction, mem.raw_code[0], temperature))
+        except queue.Full:
+            logger.warning("cheatsheet update queue full, dropping update for %s", mem.ps.filename)
+
+    # get latest cheat-sheet snapshot (thread-safe)
+    def get_latest_cheatsheet(self):
+        with self._cheat_lock:
+            return self._latest_cheatsheet
+
+    # updater owner thread: serializes calls to model.generate and publishes snapshots
+    def _cheatsheet_updater_worker(self):
+        """
+        Worker that consumes pending update requests and issues a single model.generate
+        to update the global cheatsheet. To reduce LLM calls, it will batch/merge
+        multiple pending updates that arrive within a short window.
+        """
+        while True:
+            try:
+                # block until at least one update arrives
+                instr, code, temperature = self._update_queue.get()
+            except Exception:
+                time.sleep(0.1)
+                continue
+
+            # gather any other pending updates quickly (non-blocking)
+            pending = [(instr, code)]
+            try:
+                # pull up to a small burst of pending items
+                while True:
+                    item = self._update_queue.get_nowait()
+                    pending.append((item[0], item[1]))
+            except queue.Empty:
+                pass
+
+            # Build a merged prompt that incorporates previous cheatsheet + multiple Q/A
+            prev = self.get_latest_cheatsheet() or ""
+            merged_question = "\n\n".join([f"QUESTION: {p[0]}\nMODEL_ANSWER: {p[1]}" for p in pending])
+            prompt_text = prompt_for_summarization.prompt_dc_cu.format(
+                PREVIOUS_CHEATSHEET=prev,
+                QUESTION=merged_question,
+                MODEL_ANSWER=""
+            )
+            global_cheat_msg = [{"role": "user", "content": prompt_text}]
+
+            try:
+                # single LLM call per batch
+                new_cheatsheet = self.model.generate(global_cheat_msg, temperature=temperature)
+                with self._cheat_lock:
+                    # publish the new snapshot
+                    self._latest_cheatsheet = new_cheatsheet
+                logger.info("Global cheatsheet updated by updater worker (batch size=%d)", len(pending))
+            except Exception as e:
+                logger.error(f"Updater worker: failed to call model.generate: {e}")
+            finally:
+                for _ in pending:
+                    self._update_queue.task_done()
+
+    def update_global_cheatsheet(self, mem, temperature):
+        # Backwards-compatible alias: just enqueue
+        self.enqueue_cheatsheet_update(mem, temperature)
     
     def generate_reflexion(self, mem, temperature):
         if mem.pass_perf:
@@ -491,80 +510,4 @@ class OptimAgent(Reflexion_Oneshot):
         ]
         mem.reflection = self.model.generate(reflect_msg, temperature=temperature)
 
-    # Helper function to extract cheatsheet from response
-    def extract_cheatsheet(
-        self,
-        response: str,
-        old_cheatsheet: str,
-    ) -> str:
-        """
-        Extracts the cheatsheet from the model response.
-        
-        Arguments:
-            response : str : The response from the model.
-            old_cheatsheet : str : The old cheatsheet to return if the new one is not found.
-
-        Returns:
-            str : The extracted cheatsheet (if not found, returns the old cheatsheet).
-        """
-        response = response.strip()
-        # <cheatsheet> (content) </cheatsheet>
-        if "<cheatsheet>" in response:
-            try:
-                txt = response.split("<cheatsheet>")[1].strip()
-                txt = txt.split("</cheatsheet>")[0].strip()
-                return txt
-            except:
-                return old_cheatsheet
-        else:
-            return old_cheatsheet
-    
-    def generate_dc(self, mem, method, temperature):
-        # with self.cheatsheet_lock:
-        if method == "json":
-            # mem.reflection or mem.raw_code[0] can be used to build the prompt
-            # text = self.cheatsheet_manager.build_prompt_qa(mem.ps.instruction, mem.raw_code[0])
-            # text = self.cheatsheet_manager.build_prompt_reflect(mem.ps.instruction, mem.reflection)
-            
-            text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
-        else:
-            current_sheet = self.global_cheatsheet
-            if method == "dc_full":
-                text = prompt_for_summarization.prompt_for_dc_full.format(
-                    PREVIOUS_CHEATSHEET=current_sheet,
-                    QUESTION=mem.ps.instruction,
-                    MODEL_ANSWER=mem.raw_code[0],
-                )
-            elif method == "dc_short":
-                text = prompt_for_summarization.prompt_for_dc_short.format(
-                    PREVIOUS_CHEATSHEET=current_sheet,
-                    QUESTION=mem.ps.instruction,
-                    MODEL_ANSWER=mem.raw_code[0],
-                )
-            elif method == "reflect":
-                text = prompt_for_summarization.prompt_for_dc_reflect.format(
-                    PREVIOUS_CHEATSHEET=current_sheet,
-                    QUESTION=mem.ps.instruction,
-                    MODEL_ANSWER=mem.raw_code[0],
-                    REFLECTION=mem.reflection,
-                )
-
-        msg = [
-            {"role": "user", "content": text},
-        ]
-        try:
-            response = self.model.generate(msg, temperature=temperature, max_tokens=10000)
-        except:
-            logger.info(f"failed to call LLM for {mem.ps.filename}, skip update cheatsheet")
-            return
-        
-        # with self.cheatsheet_lock:
-        if method == "json":
-            self.cheatsheet_manager.apply_operations(response)
-            mem.global_cheatsheet = self.cheatsheet_manager.to_string_for_prompt()
-            # logger.info(f"Updated global cheatsheet for {mem.ps.filename}, \nnew cheatsheet: \n{self.cheatsheet_manager.to_string_for_prompt()}")
-        else:
-            self.global_cheatsheet = self.extract_cheatsheet(response, current_sheet)
-            mem.global_cheatsheet = self.global_cheatsheet
-            # logger.info(f"Updated global cheatsheet for {mem.ps.filename}, \nnew cheatsheet: \n{self.global_cheatsheet}")
-        
+        return mem

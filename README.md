@@ -5,7 +5,7 @@ This repo is based on the [GEAK-agent-v1](https://github.com/AMD-AGI/GEAK-agent/
 1. add a embedding-based retriever.
 2. add a cheatsheet (with a manager), also initialize it with triton documents.
 3. add support for open_source models (vllm.py)
-4. add a parallel(pipeline) version for optimAgent (saved in OptimAgent_parallel.py), but performance is not so good as seperated one.
+4. add a parallel(pipeline) version for optimAgent (saved in OptimAgent_parallel.py), but performance is not so good as seperated one. Previous two version of parallel is OptimAgent_withlock/queue.py
 
 ## Technical report [![arXiv](https://img.shields.io/badge/arXiv-2507.23194-b31b1b.svg)](https://arxiv.org/abs/2507.23194)
 
