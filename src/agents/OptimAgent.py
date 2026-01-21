@@ -21,6 +21,14 @@ class OptimAgent(Reflexion_Oneshot):
         with open('./first_cheatsheet.json', 'r') as f:
             cheatsheet_data = json.load(f)
         self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+        with open('./second_cheatsheet.json', 'r') as f:
+            api_data = json.load(f)
+        self.api_sheet = api_data['api_usage']
+        # convert to string
+        self.api_sheet_str = ""
+        for item in self.api_sheet:
+            self.api_sheet_str += f"* {item['content']}\n"
+        print(self.api_sheet_str)
 
     def memory_init(self, mem_file=None):
         """
@@ -331,17 +339,37 @@ class OptimAgent(Reflexion_Oneshot):
                     mem.ps.solution = mem.raw_code[0]
 
             # update cheatsheet
-            logger.info(f"\nupdate cheatsheet")
-            with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
-                # if multi_thread:
-                #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
-                #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
-                #         for future in as_completed(futures):
-                #             pbar.update(1)
-                # else:
-                    for mem in self.memories[start_idx:(start_idx + data_len)]:
-                        self.generate_dc(mem, method="json", temperature=temperature)
-                        pbar.update(1)
+            # logger.info(f"\nupdate cheatsheet")
+            # with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
+            #     # if multi_thread:
+            #     #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
+            #     #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
+            #     #         for future in as_completed(futures):
+            #     #             pbar.update(1)
+            #     # else:
+            #         for mem in self.memories[start_idx:(start_idx + data_len)]:
+            #             self.generate_dc(mem, method="json", temperature=temperature)
+            #             pbar.update(1)
+            
+            # prune cheatsheet to control length
+            prune_type = "round-robin"
+            # prune_type = "llm-summarization"
+            max_length = 1000000
+            # if self.cheatsheet_manager.to_string_for_prompt().__len__() > max_length:
+            #     logger.info(f"Cheatsheet length {self.cheatsheet_manager.to_string_for_prompt().__len__()} exceeds max length {max_length}, pruning...")
+            #     if prune_type == "round-robin":
+            #         self.cheatsheet_manager.prune_length(max_length=1000000)
+            #     elif prune_type == "llm-summarization":
+            #         prompt = self.cheatsheet_manager.build_prompt_for_pruning(target_length=1000000)
+            #         msg = [
+            #             {"role": "user", "content": prompt},
+            #         ]
+            #         try:
+            #             response = self.model.generate(msg, temperature=1.0, max_tokens=10000)
+            #             self.cheatsheet_manager.apply_operations(response)
+            #             logger.info(f"Cheatsheet pruned via LLM summarization, now stats: {self.cheatsheet_manager.get_stats()}")
+            #         except RetryError as e:
+            #             logger.error(f"LLM call failed during cheatsheet pruning: {e}. Keeping existing cheatsheet.")
             # write intermediate results
             with open(f"{root}_cheatsheet_{iter}.json", "w") as f:
                 json.dump(self.cheatsheet_manager.data, f, indent=4)
@@ -350,10 +378,22 @@ class OptimAgent(Reflexion_Oneshot):
                 self.dataset.write_file(iter_path, start_idx=start_idx, datalen=data_len)
                 self.write_memories(mem_output_path)
 
+                acc = self.get_accuracy()
+                print("accuracy for call, exec and perf: ", acc)
+                with open(f"{root}_acc.txt", "a") as f:
+                    f.write(f"Iter {iter}: call_acc={acc['call_acc']}, exe_acc={acc['exe_acc']}, perf_acc={acc['perf_acc']}\n")
+
+
             os.system(f'rm -rf {exe_dir}')
             os.system(f'rm -rf {perf_result_dir}')
             os.system(f'rm -rf {perf_log_dir}')
     
+    def get_accuracy(self):
+        call_acc = sum(1 for mem in self.memories if mem.pass_call) / len(self.memories)
+        exe_acc = sum(1 for mem in self.memories if mem.pass_exe) / len(self.memories)
+        perf_acc = sum(1 for mem in self.memories if mem.pass_perf) / len(self.memories)
+        return {"call_acc": call_acc, "exe_acc": exe_acc, "perf_acc": perf_acc}
+
     def generate_solution(self, mem, temperature=0):
 
         tab = "\n"
@@ -365,7 +405,7 @@ class OptimAgent(Reflexion_Oneshot):
         # )
         # combine generation with re-ordered cheatsheet
         text = prompt_for_generation.prompt_reorder.format(
-            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(),
+            cheatsheet=self.api_sheet_str,
             instruction=mem.ps.instruction,
             function_signatures=fss_text
         )

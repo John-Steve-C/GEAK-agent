@@ -29,9 +29,14 @@ if __name__ == "__main__":
     # root = "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc_mem"
     # root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
     # root = "../outputs/test/optimagent_gpt41_mini_serial_dc_mem"
-    root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_api_init_combined_dc_reorder_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_prune_mem"
+    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune_mem"
+    root = "../outputs/test/optimagent_gpt41_mini_api_append_mem"
 
     flag_pass_exe = [0] * 184   # total 184 samples
+    flag_pass_call = [0] * 184
     solutions = [None] * 184
     
     output_results = []
@@ -50,6 +55,8 @@ if __name__ == "__main__":
 
         for idx, key in enumerate(data):
             # print(idx, key, data[key])
+            if data[key]['pass_call']:
+                flag_pass_call[idx] = 1
             if data[key]["pass_exe"] or data[key]["pass_perf"]:
                 flag_pass_exe[idx] = 1
                 if len(data[key]["perf_candidates"]) > 0:
@@ -58,10 +65,10 @@ if __name__ == "__main__":
                     solutions[idx] = data[key]["exe_candidate"]
                 else:
                     print(f"Warning: No valid solution for {key} at iter {iter}")
-
+        # print(cnt)
         acc = sum(flag_pass_exe) / len(flag_pass_exe)
         accum_acc.append(acc)
-        print(f"iter {iter}, acc: {acc:.4f}, number passed: {sum(flag_pass_exe)}")
+        print(f"iter {iter}, acc: {acc:.4f}, number pass_exe: {sum(flag_pass_exe)}, number pass_call: {sum(flag_pass_call)}")
     
     input("Press Enter to save final results...")
 

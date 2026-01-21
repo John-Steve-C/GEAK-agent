@@ -1,0 +1,735 @@
+{
+    "solutions_and_patterns": [
+        {
+            "id": "c2ca4320",
+            "content": "Optimize matrix multiplication by dividing the output matrix into blocks processed in parallel, where each block computes a submatrix. Use multi-dimensional pointer arithmetic based on tensor strides to calculate block memory addresses. Adapt pointer arithmetic to handle non-multiples of block sizes by padding and masking during loads and stores to safely handle boundaries. Improve L2 cache utilization by reordering computation launch grids in grouped column-major order to promote data reuse within groups, reducing overall memory transfers. Utilize higher precision (e.g., float32) accumulation internally to enhance numerical accuracy even when inputs and outputs are in lower precision (e.g., float16). Incorporate autotuning frameworks that explore configurations of block sizes, warp counts, and pipeline stages to empirically identify performance-optimal parameters for given hardware and problem sizes. Support fusion of activation functions post-accumulation to allow flexible, high-performance custom neural network operations. These strategies collectively enable creation of customizable, efficient GPU kernels comparable to vendor libraries like cuBLAS, but with extensibility benefits.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2f0477d9",
+            "content": "Implement fused multi-stage GPU kernels for attention by decomposing computation into tiled sub-blocks processed in multiple pipeline stages, enabling efficient handling of causal masking and scaling. Use autotuning with configuration pruning based on hardware generation and problem size to find optimal block shapes and warp counts, adapting to platform-specific constraints such as those on AMD or NVIDIA Hopper/Blackwell architectures. Employ flexible tensor descriptors that support varying memory layouts and transpositions at runtime, facilitating efficient tile-wise loading and storage for both standard and FP8 data types. Incorporate numerical stability techniques such as log-sum-exp scaling to maintain accuracy during softmax and exponential operations within attention. Exploit architectural features and warp specialization to improve throughput and reduce register pressure when feasible. Structure the backward pass with blocked matrix operations that mirror the forward pass tiling, including preprocessing steps to accumulate correction factors and carefully implement masking logic in gradient computations to enforce autoregressive causality. Integrate conditional compilation and kernel argument specialization to dynamically support causal vs. non-causal modes, precision variants, and hardware capabilities, enabling a unified yet high-performance solution. These strategies systematically extend classical GPU matrix multiplication optimizations to the fused attention pattern, preserving performance while supporting algorithmic flexibility and hardware heterogeneity.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7e07a042",
+            "content": "Leverage external vendor-provided device libraries (e.g., CUDA libdevice or ROCm equivalents) within GPU kernels to perform advanced mathematical operations such as trigonometric functions, ensuring numerical correctness and performance parity with native frameworks. This requires abstracting calls to type-specific versions of the same function and enabling runtime dispatch based on input data types. Additionally, support for backend-specific library paths and conditional linking facilitates portability across hardware platforms and driver stacks. Such integration allows seamless use of tested, optimized device implementations in custom kernels without reimplementing complex math functions.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "48fadcc4",
+            "content": "Design persistent GPU kernels that manage multi-block tiling cooperatively across all streaming multiprocessors by assigning tiles dynamically to each thread block, reducing kernel launch overhead and improving load balancing. Use programmatic mapping of tile IDs to output submatrices via grouped scheduling to optimize resource utilization and concurrency. Employ warp specialization to leverage asynchronous warp scheduling features on supported architectures, enabling software pipelining and improved instruction-level parallelism. Integrate epilogue subtiling, partitioning output accumulator writes into smaller subtile stores, to decrease shared memory footprint in epilogue phases, thereby allowing increased pipeline stages or warps to improve throughput. Combine autotuning of block sizes, warp counts, and pipeline stages with conditional pruning of incompatible configurations based on hardware generation and kernel requirements to empirically optimize performance. Utilize flexible tensor descriptor abstractions both on host and device sides to enable efficient tile-wise loading, storing, and support for multiple data layouts and precisions, improving kernel portability and maintainability. These persistent and descriptor-based kernel strategies enhance matrix multiplication efficiency, especially for large matrices and modern GPU architectures, while complementing and extending classical tiling and fusion techniques.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "d685c2af",
+            "content": "Implement efficient layer normalization kernels by decomposing forward and backward passes into tiled parallel workloads, computing mean and variance via parallel reductions across feature dimensions. For the backward pass, compute vector-Jacobian products by expressing gradients in terms of normalized inputs and inputs' gradients, leveraging intermediate aggregated constants to simplify computation. Employ staged parallel reduction strategies with multiple partial sum buffers protected by fine-grained locks to accumulate gradients of parameters (weights and biases) efficiently across rows, reducing contention and improving cache locality. Follow this with a separate kernel that performs a final reduction over partial sums to obtain parameter gradients, enabling scalable and lock-efficient summation. Utilize block-wise loading with masking to safely handle boundaries and ensure correct computation on feature dimensions that may not align with block sizes. Apply heuristics to select block sizes and group sizes to optimize utilization and synchronization overheads. This pattern generalizes to other normalization operators and scenarios where gradient accumulation requires careful coordination of partial results across thread blocks on GPUs.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "365897d7",
+            "content": "Develop GPU kernels by partitioning data into blocks assigned to parallel programs identified via program IDs, enabling independent processing of contiguous data slices. Use multi-dimensional pointer arithmetic with boundary-checking masks to safely handle inputs not divisible by block sizes, avoiding out-of-bounds memory access. Employ launch grids with configurable block sizes to flexibly map kernel instances to data partitions, allowing scalable performance tuning. Leverage kernel decorators or runtime annotations to enable just-in-time compilation and allow embedding compile-time constants (e.g., block size) for optimization. Employ asynchronous kernel invocation returning handles that can be synchronized later, facilitating concurrency. These practices form a foundation for writing custom, efficient parallel operations on GPUs, especially within high-level frameworks like Triton that abstract low-level GPU programming details.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9f153c23",
+            "content": "Fuse bandwidth-bound operations such as softmax by combining multiple computation stages (e.g., maximum subtraction, exponentiation, summation, division) into a single GPU kernel to minimize DRAM load/store volume. Use on-chip SRAM to hold intermediate data to maximize reuse. Employ masking and padding to handle arbitrary input shapes safely, ensuring block sizes are powers-of-two to comply with GPU block dimension requirements. Utilize multi-program-id grid loops to distribute work over rows or data partitions, balancing load and enabling scalability. Integrate occupancy modeling using device properties (register count, shared memory, warp size) to heuristically tune launch parameters like number of warps, stages, and block sizes for maximal hardware utilization. This pattern dramatically improves performance over naive implementations or automatic framework JIT kernels, especially for operations reducible to parallel reduction patterns fused with elementwise transformations.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "5d0211a5",
+            "content": "Leverage kernel launch concurrency and persistent kernel cooperative loop structures to handle irregular matrix sizes by iterating over data slices within each program, combined with masking to prevent out-of-bounds memory accesses, thus supporting arbitrary input shapes without sacrificing performance or correctness.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "df26f149",
+            "content": "Implement block scaled matrix multiplication kernels that leverage hardware-accelerated tensor core instructions supporting microformats like FP4 and FP8 on modern NVIDIA and AMD GPUs. Organize scale factors into packed tensor layouts tailored to the hardware's tensor core inner-loop access patterns to ensure contiguous memory reads, improving data throughput and latency. On NVIDIA GPUs, use five-dimensional scale factor tensors reshaped and logically transposed to conform to Triton's scaled dot product semantics while aligning with CUDA device expectations. On AMD GPUs, preshuffle scale tensors per-thread to store multiple scale values contiguously, optimizing global memory coalescing and warp-level operand access for CDNA4 architectures. Use flexible tensor descriptor abstractions to enable efficient tile-wise load/store operations for inputs, outputs, and scales, supporting varying precisions and packed microformats. Combine autotuning of block sizes, vectorization widths, and pipeline stages with conditional parameterization of warp counts and hardware capabilities to maximize throughput and numerical accuracy. Integrate runtime queries to detect backend and architecture support for block scaled instructions to dynamically select optimal kernel variants. Provide fallbacks and reference computations by unpacking and broadcasting scale factors, enabling validation against dense floating-point matmul. These strategies systematically extend matrix multiplication optimization techniques by incorporating scale factor management and microformat hardware-specific tuning, enabling high-performance custom kernels that rival vendor implementations like cuBLAS or AMD's ROCm while maintaining extensibility and cross-platform portability.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "80d91eba",
+            "content": "Implement memory-efficient stochastic masking (e.g., dropout) in GPU kernels by generating pseudorandom masks on-the-fly using parallel block-based PRNG with a single seed and element offsets, avoiding materializing full mask tensors. This reduces memory footprint and data movement, while simplifying randomness state management, especially useful for recompute/checkpointing scenarios. Utilize counters or program IDs as offsets combined with a high-quality parallel PRNG (like Philox) to produce reproducible per-element random values within blocks, enabling consistent masks across kernel invocations with identical seeds. Adjust output scaling to maintain expected value properties (e.g., scale retained inputs by 1/(1 - p) in dropout). This pattern generalizes to other stochastic operators requiring randomized masking or selection without extra memory overhead.",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "8c99e15f",
+            "content": "Implement grouped GEMM kernels that statically schedule multiple independent GEMM problems within a single GPU kernel by assigning sequential tile ID ranges per GEMM and iterating over tiles statically on device. Track cumulative tile counts across GEMMs to dispatch each GPU program instance to process tiles for one GEMM at a time. Use multi-dimensional pointer arithmetic and tensor descriptors adapted per GEMM to support varying sizes and leading dimensions. Autotune block sizes and number of concurrently active CTAs to saturate GPU SMs, fixing grid size by number of SMs when appropriate. Include support for newer hardware features (e.g., TMA on NVIDIA GPUs) and precision variants (FP16, FP8) by selecting appropriate tensor layouts and data types dynamically per GEMM group. This approach reduces kernel launch overhead for multiple matrix multiplications, improves resource utilization via workload balancing, and generalizes classical tiled matrix multiplication kernels to efficiently batch diverse GEMMs in a single kernel invocation.",
+            "variations": [],
+            "expansions": []
+        }
+    ],
+    "edge_cases_and_pitfalls": [],
+    "meta_reasoning": [
+        {
+            "id": "e3a9f84c",
+            "content": "Apply high-level device property queries (e.g., counts of multiprocessors, registers, shared memory size, warp size) at runtime to guide empirical tuning of kernel launch configurations and occupancy, balancing register pressure, shared memory usage, and thread concurrency to optimize throughput without explicit user intervention.",
+            "variations": [],
+            "expansions": []
+        }
+    ],
+    "api_usage": [
+        {
+            "id": "c99cc875",
+            "content": "# triton.language.umulhi\u00b6\n\ntriton.language.umulhi(_x_ , _y_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise most significant N bits of the 2N-bit product of `x` and `y`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input values\n\n  * **y** (_Block_) \u2013 the input values\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "84143b41",
+            "content": "# triton.language.ceil\u00b6\n\ntriton.language.ceil(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise ceil of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4430a8d8",
+            "content": "# triton.language.log2\u00b6\n\ntriton.language.log2(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise logarithm (base 2) of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "999093bc",
+            "content": "# triton.language.gather\u00b6\n\ntriton.language.gather(_src_ , _index_ , _axis_ , __semantic =None_)\u00b6\n    \n\nGather from a tensor along a given dimension.\n\nParameters:\n    \n\n  * **src** (_Tensor_) \u2013 the source tensor\n\n  * **index** (_Tensor_) \u2013 the index tensor\n\n  * **axis** (_int_) \u2013 the dimension to gather along\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.gather(...)` instead of `gather(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "dfd6b098",
+            "content": "# triton.testing.perf_report\u00b6\n\ntriton.testing.perf_report(_benchmarks_)\u00b6\n    \n\nMark a function for benchmarking. The benchmark can then be executed by using the `.run` method on the return value.\n\nParameters:\n    \n\n**benchmarks** (List of [`Benchmark`](triton.testing.Benchmark.html#triton.testing.Benchmark \"triton.testing.Benchmark\")) \u2013 Benchmarking configurations.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "65f21510",
+            "content": "# triton.language.histogram\u00b6\n\ntriton.language.histogram(_input_ , _num_bins_ , _mask =None_, __semantic =None_, __generator =None_)\u00b6\n    \n\ncomputes an histogram based on input tensor with num_bins bins, the bins have a width of 1 and start at 0.\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input tensor\n\n  * **num_bins** (_int_) \u2013 number of histogram bins\n\n  * **mask** (Block of triton.int1, optional) \u2013 if mask[idx] is false, exclude input[idx] from histogram\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.histogram(...)` instead of `histogram(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4c188e50",
+            "content": "# triton.language.rand\u00b6\n\ntriton.language.rand(_seed_ , _offset_ , _n_rounds : constexpr = constexpr[10]_)\u00b6\n    \n\nGiven a `seed` scalar and an `offset` block, returns a block of random `float32` in \\\\(U(0, 1)\\\\).\n\nParameters:\n    \n\n  * **seed** \u2013 The seed for generating random numbers.\n\n  * **offsets** \u2013 The offsets to generate random numbers for.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "6c37345f",
+            "content": "# triton.language.argmin\u00b6\n\ntriton.language.argmin(_input_ , _axis_ , _tie_break_left =True_, _keep_dims =False_)\u00b6\n    \n\nReturns the minimum index of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n  * **tie_break_left** (_bool_) \u2013 if true, in case of a tie (i.e., multiple elements have the same minimum index value), return the left-most index for values that aren\u2019t NaN\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.argmin(...)` instead of `argmin(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "d3acdd53",
+            "content": "# triton.language.atomic_add\u00b6\n\ntriton.language.atomic_add(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic add at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_add(...)` instead of `atomic_add(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "3d6c7c3d",
+            "content": "# triton.language.device_assert\u00b6\n\ntriton.language.device_assert(_cond_ , _msg =''_, _mask =None_, __semantic =None_)\u00b6\n    \n\nAssert the condition at runtime from the device. Requires that the environment variable `TRITON_DEBUG` is set to a value besides `0` in order for this to have any effect.\n\nUsing the Python `assert` statement is the same as calling this function, except that the second argument must be provided and must be a string, e.g. `assert pid == 0, \"pid != 0\"`. The environment variable must be set for this `assert` statement to have any effect.\n    \n    \n    tl.device_assert(pid == 0)\n    assert pid == 0, f\"pid != 0\"\n    \n\nParameters:\n    \n\n  * **cond** \u2013 the condition to assert. This is required to be a boolean tensor.\n\n  * **msg** \u2013 the message to print if the assertion fails. This is required to be a string literal.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "a6d40850",
+            "content": "# triton.language.ravel\u00b6\n\ntriton.language.ravel(_x_ , _can_reorder =False_)\u00b6\n    \n\nReturns a contiguous flattened view of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input tensor\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.ravel(...)` instead of `ravel(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "447afea4",
+            "content": "# triton.language.multiple_of\u00b6\n\ntriton.language.multiple_of(_input_ , _values_ , __semantic =None_)\u00b6\n    \n\nLet the compiler know that the values in `input` are all multiples of `value`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "78f25f18",
+            "content": "# triton.autotune\u00b6  \n  \ntriton.autotune(_configs_ , _key_ , _prune_configs_by =None_, _reset_to_zero =None_, _restore_value =None_, _pre_hook =None_, _post_hook =None_, _warmup =None_, _rep =None_, _use_cuda_graph =False_, _do_bench =None_, _cache_results =False_)\u00b6\n    \n\nDecorator for auto-tuning a `triton.jit`\u2019d function.\n    \n    \n    @triton.autotune(configs=[\n        triton.Config(kwargs={'BLOCK_SIZE': 128}, num_warps=4),\n        triton.Config(kwargs={'BLOCK_SIZE': 1024}, num_warps=8),\n      ],\n      key=['x_size'] # the two above configs will be evaluated anytime\n                     # the value of x_size changes\n    )\n    @triton.jit\n    def kernel(x_ptr, x_size, BLOCK_SIZE: tl.constexpr):\n        ...\n    \n\nNote:\n    \n\nWhen all the configurations are evaluated, the kernel will run multiple times. This means that whatever value the kernel updates will be updated multiple times. To avoid this undesired behavior, you can use the reset_to_zero argument, which resets the value of the provided tensor to zero before running any configuration.\n\nIf the environment variable `TRITON_PRINT_AUTOTUNING` is set to `\"1\"`, Triton will print a message to stdout after autotuning each kernel, including the time spent autotuning and the best configuration.\n\nParameters:\n    \n\n  * **configs** (_list_ _[_[_triton.Config_](triton.Config.html#triton.Config \"triton.Config\") _]_) \u2013 a list of `triton.Config` objects\n\n  * **key** (_list_ _[__str_ _]_) \u2013 a list of argument names whose change in value will trigger the evaluation of all provided configs.\n\n  * **prune_configs_by** \u2013 \n\na dict of functions that are used to prune configs, fields: \u2018perf_model\u2019: performance model used to predicate running time with different configs, returns running time \u2018top_k\u2019: number of configs to bench \u2018early_config_prune\u2019: a function used to prune configs. It should have the signature\n\n> prune_configs_by( configs: List[triton.Config], named_args: Dict[str, Any], **kwargs: Dict[str, Any]) -> List[triton.Config]: and return pruned configs. It should return at least one config.\n\n  * **reset_to_zero** (_list_ _[__str_ _]_) \u2013 a list of argument names whose value will be reset to zero before evaluating any configs.\n\n  * **restore_value** (_list_ _[__str_ _]_) \u2013 a list of argument names whose value will be restored after evaluating any configs.\n\n  * **pre_hook** (_lambda args_ _,__reset_only_) \u2013 a function that will be called before the kernel is called. This overrides the default pre_hook used for \u2018reset_to_zero\u2019 and \u2018restore_value\u2019. \u2018kwargs\u2019: a dict of all arguments passed to the kernel. \u2018reset_only\u2019: a boolean indicating whether the pre_hook is called to reset the values only, without a corresponding post_hook.\n\n  * **post_hook** (_lambda args_ _,__exception_) \u2013 a function that will be called after the kernel is called. This overrides the default post_hook used for \u2018restore_value\u2019. \u2018kwargs\u2019: a dict of all arguments passed to the kernel. \u2018exception\u2019: the exception raised by the kernel in case of a compilation or runtime error.\n\n  * **warmup** (_int_) \u2013 warmup time (in ms) to pass to benchmarking (deprecated).\n\n  * **rep** (_int_) \u2013 repetition time (in ms) to pass to benchmarking (deprecated).\n\n  * **do_bench** (_lambda fn_ _,__quantiles_) \u2013 a benchmark function to measure the time of each run.\n\n  * **cache_results** \u2013 whether to cache autotune timings to disk. Defaults to False.\n\n\n\n\n\u201ctype cache_results: bool\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "79bae704",
+            "content": "# triton.language.maximum\u00b6\n\ntriton.language.maximum(_x_ , _y_ , _propagate_nan: ~triton.language.core.constexpr = <PROPAGATE_NAN.NONE: 0>_, __semantic=None_)\u00b6\n    \n\nComputes the element-wise maximum of `x` and `y`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the first input tensor\n\n  * **y** (_Block_) \u2013 the second input tensor\n\n  * **propagate_nan** (_tl.PropagateNan_) \u2013 whether to propagate NaN values.\n\n\n\n\nSee also\n\n`tl.PropagateNan`\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "191f164b",
+            "content": "# triton.language.atomic_cas\u00b6\n\ntriton.language.atomic_cas(_pointer_ , _cmp_ , _val_ , _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic compare-and-swap at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **cmp** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values expected to be found in the atomic object\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_cas(...)` instead of `atomic_cas(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "6fdf7f5f",
+            "content": "# triton.language.dot\u00b6\n\ntriton.language.dot(_input_ , _other_ , _acc =None_, _input_precision =None_, _allow_tf32 =None_, _max_num_imprecise_acc =None_, _out_dtype =triton.language.float32_, __semantic =None_)\u00b6\n    \n\nReturns the matrix product of two blocks.\n\nThe two blocks must both be two-dimensional or three-dimensional and have compatible inner dimensions. For three-dimensional blocks, tl.dot performs the batched matrix product, where the first dimension of each block represents the batch dimension.\n\nParameters:\n    \n\n  * **input** (2D or 3D tensor of scalar-type in {`int8`, `float8_e5m2`, `float16`, `bfloat16`, `float32`}) \u2013 The first tensor to be multiplied.\n\n  * **other** (2D or 3D tensor of scalar-type in {`int8`, `float8_e5m2`, `float16`, `bfloat16`, `float32`}) \u2013 The second tensor to be multiplied.\n\n  * **acc** (2D or 3D tensor of scalar-type in {`float16`, `float32`, `int32`}) \u2013 The accumulator tensor. If not None, the result is added to this tensor.\n\n  * **input_precision** (string. Available options for nvidia: `\"tf32\"`, `\"tf32x3\"`, `\"ieee\"`. Default: `\"tf32\"`. Available options for amd: `\"ieee\"`, (CDNA3 only) `\"tf32\"`.) \u2013 How to exercise the Tensor Cores for f32 x f32. If the device does not have Tensor Cores or the inputs are not of dtype f32, this option is ignored. For devices that do have tensor cores, the default precision is tf32.\n\n  * **allow_tf32** \u2013 _Deprecated._ If true, input_precision is set to \u201ctf32\u201d. Only one of `input_precision` and `allow_tf32` can be specified (i.e. at least one must be `None`).\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fc3929b7",
+            "content": "# triton.language.exp\u00b6\n\ntriton.language.exp(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise exponential of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f90453eb",
+            "content": "# triton.language.extra.cuda\u00b6\n\n## Programmatic Dependent Launch\u00b6\n\n[`gdc_wait`](generated/triton.language.extra.cuda.gdc_wait.html#triton.language.extra.cuda.gdc_wait \"triton.language.extra.cuda.gdc_wait\") | GDC wait is a blocking instruction that waits for all instructions in a prior kernel to complete before continuing.  \n---|---  \n[`gdc_launch_dependents`](generated/triton.language.extra.cuda.gdc_launch_dependents.html#triton.language.extra.cuda.gdc_launch_dependents \"triton.language.extra.cuda.gdc_launch_dependents\") | This operation when launched with programmatic dependent launch signals that the next program may launch once all programs in the current kernel call this function or complete.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "ca24c1ac",
+            "content": "# triton.testing.do_bench_cudagraph\u00b6\n\ntriton.testing.do_bench_cudagraph(_fn_ , _rep =20_, _grad_to_none =None_, _quantiles =None_, _return_mode ='mean'_)\u00b6\n    \n\nBenchmark the runtime of the provided function.\n\nParameters:\n    \n\n  * **fn** (_Callable_) \u2013 Function to benchmark\n\n  * **rep** (_int_) \u2013 Repetition time (in ms)\n\n  * **grad_to_none** (_torch.tensor_ _,__optional_) \u2013 Reset the gradient of the provided tensor to None\n\n  * **return_mode** (_str_) \u2013 The statistical measure to return. Options are \u201cmin\u201d, \u201cmax\u201d, \u201cmean\u201d, \u201cmedian\u201d, or \u201call\u201d. Default is \u201cmean\u201d.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "5312e8b7",
+            "content": "# triton.language.reshape\u00b6\n\ntriton.language.reshape(_input_ , _* shape_, _can_reorder =False_, __semantic =None_, __generator =None_)\u00b6\n    \n\nReturns a tensor with the same number of elements as input but with the provided shape.\n\nParameters:\n    \n\n  * **input** (_Block_) \u2013 The input tensor.\n\n  * **shape** \u2013 The new shape.\n\n\n\n\n`shape` can be passed as a tuple or as individual parameters:\n    \n    \n    # These are equivalent\n    reshape(x, (32, 32))\n    reshape(x, 32, 32)\n    \n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.reshape(...)` instead of `reshape(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f9bd29d8",
+            "content": "# triton.language.randint\u00b6\n\ntriton.language.randint(_seed_ , _offset_ , _n_rounds : constexpr = constexpr[10]_)\u00b6\n    \n\nGiven a `seed` scalar and an `offset` block, returns a single block of random `int32`.\n\nIf you need multiple streams of random numbers, using randint4x is likely to be faster than calling randint 4 times.\n\nParameters:\n    \n\n  * **seed** \u2013 The seed for generating random numbers.\n\n  * **offset** \u2013 The offsets to generate random numbers for.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2251393b",
+            "content": "# triton.language.div_rn\u00b6\n\ntriton.language.div_rn(_x_ , _y_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise precise division (rounding to nearest wrt the IEEE standard) of `x` and `y`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input values\n\n  * **y** (_Block_) \u2013 the input values\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "647d5350",
+            "content": "# triton.language.atomic_xchg\u00b6\n\ntriton.language.atomic_xchg(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic exchange at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_xchg(...)` instead of `atomic_xchg(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "dc80342b",
+            "content": "# triton.language.tensor\u00b6\n\n_class _triton.language.tensor(_self_ , _handle_ , _type : dtype_)\u00b6\n    \n\nRepresents an N-dimensional array of values or pointers.\n\n`tensor` is the fundamental data structure in Triton programs. Most functions in `triton.language` operate on and return tensors.\n\nMost of the named member functions here are duplicates of the free functions in `triton.language`. For example, `triton.language.sqrt(x)` is equivalent to `x.sqrt()`.\n\n`tensor` also defines most of the magic/dunder methods, so you can write `x+y`, `x << 2`, etc.\n\nConstructors\n\n__init__(_self_ , _handle_ , _type : dtype_)\u00b6\n    \n\nNot called by user code.\n\nMethods\n\n`__init__`(self, handle, type) | Not called by user code.  \n---|---  \n`abs`(self[, _semantic]) | Forwards to [`abs()`](triton.language.abs.html#triton.language.abs \"triton.language.abs\") free function  \n`advance`(self, offsets[, _semantic]) | Forwards to [`advance()`](triton.language.advance.html#triton.language.advance \"triton.language.advance\") free function  \n`argmax`(input, axis[, tie_break_left, keep_dims]) | Returns the maximum index of all elements in the `input` tensor along the provided `axis`  \n`argmin`(input, axis[, tie_break_left, keep_dims]) | Returns the minimum index of all elements in the `input` tensor along the provided `axis`  \n`associative_scan`(self, axis, combine_fn[, ...]) | Forwards to [`associative_scan()`](triton.language.associative_scan.html#triton.language.associative_scan \"triton.language.associative_scan\") free function  \n`atomic_add`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_add()`](triton.language.atomic_add.html#triton.language.atomic_add \"triton.language.atomic_add\") free function  \n`atomic_and`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_and()`](triton.language.atomic_and.html#triton.language.atomic_and \"triton.language.atomic_and\") free function  \n`atomic_cas`(self, cmp, val[, sem, scope, ...]) | Forwards to [`atomic_cas()`](triton.language.atomic_cas.html#triton.language.atomic_cas \"triton.language.atomic_cas\") free function  \n`atomic_max`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_max()`](triton.language.atomic_max.html#triton.language.atomic_max \"triton.language.atomic_max\") free function  \n`atomic_min`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_min()`](triton.language.atomic_min.html#triton.language.atomic_min \"triton.language.atomic_min\") free function  \n`atomic_or`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_or()`](triton.language.atomic_or.html#triton.language.atomic_or \"triton.language.atomic_or\") free function  \n`atomic_xchg`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_xchg()`](triton.language.atomic_xchg.html#triton.language.atomic_xchg \"triton.language.atomic_xchg\") free function  \n`atomic_xor`(self, val[, mask, sem, scope, ...]) | Forwards to [`atomic_xor()`](triton.language.atomic_xor.html#triton.language.atomic_xor \"triton.language.atomic_xor\") free function  \n`broadcast_to`(self, *shape[, _semantic]) | Forwards to [`broadcast_to()`](triton.language.broadcast_to.html#triton.language.broadcast_to \"triton.language.broadcast_to\") free function  \n`cast`(self, dtype[, fp_downcast_rounding, ...]) | Forwards to [`cast()`](triton.language.cast.html#triton.language.cast \"triton.language.cast\") free function  \n`cdiv`(x, div) | Computes the ceiling division of `x` by `div`  \n`ceil`(self[, _semantic]) | Forwards to [`ceil()`](triton.language.ceil.html#triton.language.ceil \"triton.language.ceil\") free function  \n`cos`(self[, _semantic]) | Forwards to [`cos()`](triton.language.cos.html#triton.language.cos \"triton.language.cos\") free function  \n`cumprod`(input[, axis, reverse]) | Returns the cumprod of all elements in the `input` tensor along the provided `axis`  \n`cumsum`(input[, axis, reverse, dtype]) | Returns the cumsum of all elements in the `input` tensor along the provided `axis`  \n`erf`(self[, _semantic]) | Forwards to [`erf()`](triton.language.erf.html#triton.language.erf \"triton.language.erf\") free function  \n`exp`(self[, _semantic]) | Forwards to [`exp()`](triton.language.exp.html#triton.language.exp \"triton.language.exp\") free function  \n`exp2`(self[, _semantic]) | Forwards to [`exp2()`](triton.language.exp2.html#triton.language.exp2 \"triton.language.exp2\") free function  \n`expand_dims`(self, axis[, _semantic]) | Forwards to [`expand_dims()`](triton.language.expand_dims.html#triton.language.expand_dims \"triton.language.expand_dims\") free function  \n`flip`(x[, dim]) | Flips a tensor x along the dimension dim.  \n`floor`(self[, _semantic]) | Forwards to [`floor()`](triton.language.floor.html#triton.language.floor \"triton.language.floor\") free function  \n`gather`(self, index, axis[, _semantic]) | Forwards to [`gather()`](triton.language.gather.html#triton.language.gather \"triton.language.gather\") free function  \n`histogram`(self, num_bins[, mask, _semantic, ...]) | Forwards to [`histogram()`](triton.language.histogram.html#triton.language.histogram \"triton.language.histogram\") free function  \n`item`(self[, _semantic, _generator]) | Forwards to `item()` free function  \n`log`(self[, _semantic]) | Forwards to [`log()`](triton.language.log.html#triton.language.log \"triton.language.log\") free function  \n`log2`(self[, _semantic]) | Forwards to [`log2()`](triton.language.log2.html#triton.language.log2 \"triton.language.log2\") free function  \n`logical_and`(self, other[, _semantic]) |   \n`logical_or`(self, other[, _semantic]) |   \n`max`(input[, axis, return_indices, ...]) | Returns the maximum of all elements in the `input` tensor along the provided `axis`  \n`min`(input[, axis, return_indices, ...]) | Returns the minimum of all elements in the `input` tensor along the provided `axis`  \n`permute`(self, *dims[, _semantic]) | Forwards to [`permute()`](triton.language.permute.html#triton.language.permute \"triton.language.permute\") free function  \n`ravel`(x[, can_reorder]) | Returns a contiguous flattened view of `x`.  \n`reduce`(self, axis, combine_fn[, keep_dims, ...]) | Forwards to [`reduce()`](triton.language.reduce.html#triton.language.reduce \"triton.language.reduce\") free function  \n`reduce_or`(input, axis[, keep_dims]) | Returns the reduce_or of all elements in the `input` tensor along the provided `axis`  \n`reshape`(self, *shape[, can_reorder, ...]) | Forwards to [`reshape()`](triton.language.reshape.html#triton.language.reshape \"triton.language.reshape\") free function  \n`rsqrt`(self[, _semantic]) | Forwards to [`rsqrt()`](triton.language.rsqrt.html#triton.language.rsqrt \"triton.language.rsqrt\") free function  \n`sigmoid`(x) | Computes the element-wise sigmoid of `x`.  \n`sin`(self[, _semantic]) | Forwards to [`sin()`](triton.language.sin.html#triton.language.sin \"triton.language.sin\") free function  \n`softmax`(x[, dim, keep_dims, ieee_rounding]) | Computes the element-wise softmax of `x`.  \n`sort`(self[, dim, descending]) |   \n`split`(self[, _semantic, _generator]) | Forwards to [`split()`](triton.language.split.html#triton.language.split \"triton.language.split\") free function  \n`sqrt`(self[, _semantic]) | Forwards to [`sqrt()`](triton.language.sqrt.html#triton.language.sqrt \"triton.language.sqrt\") free function  \n`sqrt_rn`(self[, _semantic]) | Forwards to [`sqrt_rn()`](triton.language.sqrt_rn.html#triton.language.sqrt_rn \"triton.language.sqrt_rn\") free function  \n`store`(self, value[, mask, boundary_check, ...]) | Forwards to [`store()`](triton.language.store.html#triton.language.store \"triton.language.store\") free function  \n`sum`(input[, axis, keep_dims, dtype]) | Returns the sum of all elements in the `input` tensor along the provided `axis`  \n`to`(self, dtype[, fp_downcast_rounding, ...]) | Alias for `tensor.cast()`.  \n`trans`(self, *dims[, _semantic]) | Forwards to [`trans()`](triton.language.trans.html#triton.language.trans \"triton.language.trans\") free function  \n`view`(self, *shape[, _semantic]) | Forwards to [`view()`](triton.language.view.html#triton.language.view \"triton.language.view\") free function  \n`xor_sum`(input[, axis, keep_dims]) | Returns the xor sum of all elements in the `input` tensor along the provided `axis`  \n  \nAttributes\n\n`T` | Transposes a 2D tensor.  \n---|---  \n`type` | \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "72986aba",
+            "content": "# triton.language.flip\u00b6\n\ntriton.language.flip(_x_ , _dim =None_)\u00b6\n    \n\nFlips a tensor x along the dimension dim.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the first input tensor\n\n  * **dim** (_int_) \u2013 the dimension to flip along\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.flip(...)` instead of `flip(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "a7c8837c",
+            "content": "# triton.language.inline_asm_elementwise\u00b6\n\ntriton.language.inline_asm_elementwise(_asm : str_, _constraints : str_, _args : Sequence_, _dtype : dtype | Sequence[dtype]_, _is_pure : bool_, _pack : int_, __semantic =None_)\u00b6\n    \n\nExecute inline assembly over a tensor. Essentially, this is `map` where the function is inline assembly.\n\nThe input tensors `args` are implicitly broadcasted to the same shape.\n\n`dtype` can be a tuple of types, in which case the output is a tuple of tensors.\n\nEach invocation of the inline asm processes `pack` elements at a time. Exactly which set of inputs a block receives is unspecified. Input elements of size less than 4 bytes are packed into 4-byte registers.\n\nThis op does not support empty `dtype` \u2013 the inline asm must return at least one tensor, even if you don\u2019t need it. You can work around this by returning a dummy tensor of arbitrary type; it shouldn\u2019t cost you anything if you don\u2019t use it.\n\nExample using [PTX](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html) assembly:\n    \n    \n    @triton.jit\n    def kernel(A, B, C, D, BLOCK: tl.constexpr):\n        a = tl.load(A + tl.arange(0, BLOCK)) # uint8 tensor\n        b = tl.load(B + tl.arange(0, BLOCK)) # float32 tensor\n    \n        # For each (a,b) in zip(a,b), perform the following:\n        # - Let ai be `a` converted to int32.\n        # - Let af be `a` converted to float.\n        # - Let m be the max of ai and b.\n        # - Return ai and mi.\n        # Do the above 4 elements at a time.\n        (c, d) = tl.inline_asm_elementwise(\n            asm=\"\"\"\n            {\n                // Unpack `a` into `ai`.\n                .reg .b8 tmp<4>;\n                mov.b32 {tmp0, tmp1, tmp2, tmp3}, $8;\n                cvt.u32.u8 $0, tmp0;\n                cvt.u32.u8 $1, tmp1;\n                cvt.u32.u8 $2, tmp2;\n                cvt.u32.u8 $3, tmp3;\n            }\n            // Convert `ai` to float.\n            cvt.rn.f32.s32 $4, $0;\n            cvt.rn.f32.s32 $5, $1;\n            cvt.rn.f32.s32 $6, $2;\n            cvt.rn.f32.s32 $7, $3;\n            // Take max of `ai` and `b`.\n            max.f32 $4, $4, $9;\n            max.f32 $5, $5, $10;\n            max.f32 $6, $6, $11;\n            max.f32 $7, $7, $12;\n            \"\"\",\n            constraints=(\n                # 8 output registers, namely\n                #   $0=ai0, $1=ai1, $2=ai2, $3=ai3,\n                #   $4=m0,  $5=m1,  $6=m2,  $7=m3.\n                \"=r,=r,=r,=r,=r,=r,=r,=r,\"\n                # 5 input registers, namely\n                #   $8=ai,\n                #   $9=b0, $10=b1, $11=b2, $12=b3.\n                # The four elements from `a` are all packed into one register.\n                \"r,r,r,r,r\"),\n            args=[a, b],\n            dtype=(tl.int32, tl.float32),\n            is_pure=True,\n            pack=4,\n        )\n        tl.store(C + tl.arange(0, BLOCK), c)\n        tl.store(D + tl.arange(0, BLOCK), d)\n    \n\nParameters:\n    \n\n  * **asm** \u2013 assembly to run. Must match target\u2019s assembly format.\n\n  * **constraints** \u2013 asm constraints in [LLVM format](https://llvm.org/docs/LangRef.html#inline-asm-constraint-string)\n\n  * **args** \u2013 the input tensors, whose values are passed to the asm block\n\n  * **dtype** \u2013 the element type(s) of the returned tensor(s)\n\n  * **is_pure** \u2013 if true, the compiler assumes the asm block has no side-effects\n\n  * **pack** \u2013 the number of elements to be processed by one instance of inline assembly\n\n\n\nReturns:\n    \n\none tensor or a tuple of tensors of the given dtypes\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "dcd5d173",
+            "content": "# triton.language.randn\u00b6\n\ntriton.language.randn(_seed_ , _offset_ , _n_rounds : constexpr = constexpr[10]_)\u00b6\n    \n\nGiven a `seed` scalar and an `offset` block, returns a block of random `float32` in \\\\(\\mathcal{N}(0, 1)\\\\).\n\nParameters:\n    \n\n  * **seed** \u2013 The seed for generating random numbers.\n\n  * **offsets** \u2013 The offsets to generate random numbers for.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "25f94bae",
+            "content": "# triton.heuristics\u00b6\n\ntriton.heuristics(_values_)\u00b6\n    \n\nDecorator for specifying how the values of certain meta-parameters may be computed. This is useful for cases where auto-tuning is prohibitively expensive, or just not applicable.\n    \n    \n    # smallest power-of-two >= x_size\n    @triton.heuristics(values={'BLOCK_SIZE': lambda args: triton.next_power_of_2(args['x_size'])})\n    @triton.jit\n    def kernel(x_ptr, x_size, BLOCK_SIZE: tl.constexpr):\n        ...\n    \n\nParameters:\n    \n\n**values** (_dict_ _[__str_ _,__Callable_ _[__[__dict_ _[__str_ _,__Any_ _]__]__,__Any_ _]__]_) \u2013 a dictionary of meta-parameter names and functions that compute the value of the meta-parameter. each such function takes a list of positional arguments as input.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "e73b5a5d",
+            "content": "# triton.testing.assert_close\u00b6  \n  \ntriton.testing.assert_close(_x_ , _y_ , _atol =None_, _rtol =None_, _err_msg =''_)\u00b6\n    \n\nAsserts that two inputs are close within a certain tolerance.\n\nParameters:\n    \n\n  * **x** (_scala_ _,__list_ _,__numpy.ndarray_ _, or_ _torch.Tensor_) \u2013 The first input.\n\n  * **y** (_scala_ _,__list_ _,__numpy.ndarray_ _, or_ _torch.Tensor_) \u2013 The second input.\n\n  * **atol** (_float_ _,__optional_) \u2013 The absolute tolerance. Default value is 1e-2.\n\n  * **rtol** (_float_ _,__optional_) \u2013 The relative tolerance. Default value is 0.\n\n  * **err_msg** (_str_) \u2013 The error message to use if the assertion fails.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "41873085",
+            "content": "# triton.language.cat\u00b6\n\ntriton.language.cat(_input_ , _other_ , _can_reorder =False_, __semantic =None_)\u00b6\n    \n\nConcatenate the given blocks\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 The first input tensor.\n\n  * **other** (_Tensor_) \u2013 The second input tensor.\n\n  * **reorder** \u2013 Compiler hint. If true, the compiler is allowed to reorder elements while concatenating inputs. Only use if the order does not matter (e.g., result is only used in reduction ops). Current implementation of cat supports only can_reorder=True.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "92fefe87",
+            "content": "# triton.language.expand_dims\u00b6\n\ntriton.language.expand_dims(_input_ , _axis_ , __semantic =None_)\u00b6\n    \n\nExpand the shape of a tensor, by inserting new length-1 dimensions.\n\nAxis indices are with respect to the resulting tensor, so `result.shape[axis]` will be 1 for each axis.\n\nParameters:\n    \n\n  * **input** (_tl.tensor_) \u2013 The input tensor.\n\n  * **axis** (_int_ _|__Sequence_ _[__int_ _]_) \u2013 The indices to add new axes\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.expand_dims(...)` instead of `expand_dims(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4ed4edac",
+            "content": "# triton.language.log\u00b6\n\ntriton.language.log(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise natural logarithm of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "765af8c1",
+            "content": "# triton.language.broadcast_to\u00b6\n\ntriton.language.broadcast_to(_input_ , _* shape_, __semantic =None_)\u00b6\n    \n\nTries to broadcast the given tensor to a new `shape`.\n\nParameters:\n    \n\n  * **input** (_Block_) \u2013 The input tensor.\n\n  * **shape** \u2013 The desired shape.\n\n\n\n\n`shape` can be passed as a tuple or as individual parameters:\n    \n    \n    # These are equivalent\n    broadcast_to(x, (32, 32))\n    broadcast_to(x, 32, 32)\n    \n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.broadcast_to(...)` instead of `broadcast_to(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fc47dbd8",
+            "content": "# triton.language.cos\u00b6\n\ntriton.language.cos(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise cosine of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "39bf7164",
+            "content": "# triton.language.where\u00b6\n\ntriton.language.where(_condition_ , _x_ , _y_ , __semantic =None_)\u00b6\n    \n\nReturns a tensor of elements from either `x` or `y`, depending on `condition`.\n\nNote that `x` and `y` are always evaluated regardless of the value of `condition`.\n\nIf you want to avoid unintended memory operations, use the `mask` arguments in triton.load and triton.store instead.\n\nThe shape of `x` and `y` are both broadcast to the shape of `condition`. `x` and `y` must have the same data type.\n\nParameters:\n    \n\n  * **condition** (_Block_ _of_ _triton.bool_) \u2013 When True (nonzero), yield x, otherwise yield y.\n\n  * **x** \u2013 values selected at indices where condition is True.\n\n  * **y** \u2013 values selected at indices where condition is False.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "059bccf0",
+            "content": "# triton.language.dot_scaled\u00b6\n\ntriton.language.dot_scaled(_lhs_ , _lhs_scale_ , _lhs_format_ , _rhs_ , _rhs_scale_ , _rhs_format_ , _acc =None_, _fast_math =False_, _lhs_k_pack =True_, _rhs_k_pack =True_, _out_dtype =triton.language.float32_, __semantic =None_)\u00b6\n    \n\nReturns the matrix product of two blocks in microscaling format.\n\nlhs and rhs use microscaling formats described here: <https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf>\n\nSoftware emulation enables targeting hardware architectures without native microscaling operation support. Right now for such case, microscaled lhs/rhs are upcasted to `bf16` element type beforehand for dot computation, with one exception: for AMD CDNA3 specifically, if one of the inputs is of `fp16` element type, the other input is also upcasted to `fp16` element type instead. This behavior is experimental and may be subject to change in the future.\n\nParameters:\n    \n\n  * **lhs** (_2D tensor representing fp4_ _,__fp8_ _or_ _bf16 elements. Fp4 elements are packed into uint8 inputs with the first element in lower bits. Fp8 are stored as uint8_ _or_ _the corresponding fp8 type._) \u2013 The first tensor to be multiplied.\n\n  * **lhs_scale** (_e8m0 type represented as an uint8 tensor_ _, or_ _None._) \u2013 Scale factor for lhs tensor. Shape should be [M, K//group_size] when lhs is [M, K], where group_size is 32 if scales type are e8m0.\n\n  * **lhs_format** (_str_) \u2013 format of the lhs tensor. Available formats: {`e2m1`, `e4m3`, `e5m2`, `bf16`, `fp16`}.\n\n  * **rhs** (_2D tensor representing fp4_ _,__fp8_ _or_ _bf16 elements. Fp4 elements are packed into uint8 inputs with the first element in lower bits. Fp8 are stored as uint8_ _or_ _the corresponding fp8 type._) \u2013 The second tensor to be multiplied.\n\n  * **rhs_scale** (_e8m0 type represented as an uint8 tensor_ _, or_ _None._) \u2013 Scale factor for rhs tensor. Shape should be [N, K//group_size] where rhs is [K, N]. Important: Do NOT transpose rhs_scale\n\n  * **rhs_format** (_str_) \u2013 format of the rhs tensor. Available formats: {`e2m1`, `e4m3`, `e5m2`, `bf16`, `fp16`}.\n\n  * **acc** \u2013 The accumulator tensor. If not None, the result is added to this tensor.\n\n  * **lhs_k_pack** (_bool_ _,__optional_) \u2013 If false, the lhs tensor is packed into uint8 along M dimension.\n\n  * **rhs_k_pack** (_bool_ _,__optional_) \u2013 If false, the rhs tensor is packed into uint8 along N dimension.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "49de0267",
+            "content": "# triton.language.randint4x\u00b6\n\ntriton.language.randint4x(_seed_ , _offset_ , _n_rounds : constexpr = constexpr[10]_)\u00b6\n    \n\nGiven a `seed` scalar and an `offset` block, returns four blocks of random `int32`.\n\nThis is the maximally efficient entry point to Triton\u2019s Philox pseudo-random number generator.\n\nParameters:\n    \n\n  * **seed** \u2013 The seed for generating random numbers.\n\n  * **offsets** \u2013 The offsets to generate random numbers for.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "bb46a386",
+            "content": "# triton.language.exp2\u00b6\n\ntriton.language.exp2(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise exponential (base 2) of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2a8df76f",
+            "content": "# triton.language.reduce\u00b6\n\ntriton.language.reduce(_input_ , _axis_ , _combine_fn_ , _keep_dims =False_, __semantic =None_, __generator =None_)\u00b6\n    \n\nApplies the combine_fn to all elements in `input` tensors along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input tensor, or tuple of tensors\n\n  * **axis** (_int_ _|__None_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **combine_fn** (_Callable_) \u2013 a function to combine two groups of scalar tensors (must be marked with @triton.jit)\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.reduce(...)` instead of `reduce(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fd894e73",
+            "content": "# triton.language.zeros\u00b6  \n  \ntriton.language.zeros(_shape_ , _dtype_)\u00b6\n    \n\nReturns a tensor filled with the scalar value 0 for the given `shape` and `dtype`.\n\nParameters:\n    \n\n  * **shape** (_tuple_ _of_ _ints_) \u2013 Shape of the new array, e.g., (8, 16) or (8, )\n\n  * **dtype** (_DType_) \u2013 Data-type of the new array, e.g., `tl.float16`\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "cd89364c",
+            "content": "# triton.language.sum\u00b6\n\ntriton.language.sum(_input_ , _axis =None_, _keep_dims =False_, _dtype : constexpr | None = None_)\u00b6\n    \n\nReturns the sum of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n  * **dtype** (_tl.dtype_) \u2013 the desired data type of the returned tensor. If specified, the input tensor is casted to `dtype` before the operation is performed. This is useful for preventing data overflows. If not specified, integer and bool dtypes are upcasted to `tl.int32` and float dtypes are upcasted to at least `tl.float32`.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.sum(...)` instead of `sum(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "36cb911c",
+            "content": "# triton.language.sqrt\u00b6\n\ntriton.language.sqrt(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise fast square root of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "c5af8abc",
+            "content": "# triton.language.full\u00b6\n\ntriton.language.full(_shape_ , _value_ , _dtype_ , __semantic =None_)\u00b6\n    \n\nReturns a tensor filled with the scalar value for the given `shape` and `dtype`.\n\nParameters:\n    \n\n  * **shape** (_tuple_ _of_ _ints_) \u2013 Shape of the new array, e.g., (8, 16) or (8, )\n\n  * **value** (_scalar_) \u2013 A scalar value to fill the array with\n\n  * **dtype** (_tl.dtype_) \u2013 Data type of the new array, e.g., `tl.float16`\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "b546bbbe",
+            "content": "# triton.testing.do_bench\u00b6  \n  \ntriton.testing.do_bench(_fn_ , _warmup =25_, _rep =100_, _grad_to_none =None_, _quantiles =None_, _return_mode ='mean'_)\u00b6\n    \n\nBenchmark the runtime of the provided function. By default, return the median runtime of `fn` along with the 20-th and 80-th performance percentile.\n\nParameters:\n    \n\n  * **fn** (_Callable_) \u2013 Function to benchmark\n\n  * **warmup** (_int_) \u2013 Warmup time (in ms)\n\n  * **rep** (_int_) \u2013 Repetition time (in ms)\n\n  * **grad_to_none** (_torch.tensor_ _,__optional_) \u2013 Reset the gradient of the provided tensor to None\n\n  * **quantiles** (_list_ _[__float_ _]__,__optional_) \u2013 Performance percentile to return in addition to the median.\n\n  * **return_mode** (_str_) \u2013 The statistical measure to return. Options are \u201cmin\u201d, \u201cmax\u201d, \u201cmean\u201d, \u201cmedian\u201d, or \u201call\u201d. Default is \u201cmean\u201d.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9def080e",
+            "content": "# triton.language.device_print\u00b6\n\ntriton.language.device_print(_prefix_ , _* args_, _hex =False_, __semantic =None_)\u00b6\n    \n\nPrint the values at runtime from the device. String formatting does not work for runtime values, so you should provide the values you want to print as arguments. The first value must be a string, all following values must be scalars or tensors.\n\nCalling the Python builtin `print` is the same as calling this function, and the requirements for the arguments will match this function (not the normal requirements for `print`).\n    \n    \n    tl.device_print(\"pid\", pid)\n    print(\"pid\", pid)\n    \n\nOn CUDA, printfs are streamed through a buffer of limited size (on one host, we measured the default as 6912 KiB, but this may not be consistent across GPUs and CUDA versions). If you notice some printfs are being dropped, you can increase the buffer size by calling\n    \n    \n    triton.runtime.driver.active.utils.set_printf_fifo_size(size_bytes)\n    \n\nCUDA may raise an error if you try to change this value after running a kernel that uses printfs. The value set here may only affect the current device (so if you have multiple GPUs, you\u2019d need to call it multiple times).\n\nParameters:\n    \n\n  * **prefix** \u2013 a prefix to print before the values. This is required to be a string literal.\n\n  * **args** \u2013 the values to print. They can be any tensor or scalar.\n\n  * **hex** \u2013 print all values as hex instead of decimal\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "5f434ade",
+            "content": "# triton.language.permute\u00b6\n\ntriton.language.permute(_input_ , _* dims_, __semantic =None_)\u00b6\n    \n\nPermutes the dimensions of a tensor.\n\nParameters:\n    \n\n  * **input** (_Block_) \u2013 The input tensor.\n\n  * **dims** \u2013 The desired ordering of dimensions. For example, `(2, 1, 0)` reverses the order dims in a 3D tensor.\n\n\n\n\n`dims` can be passed as a tuple or as individual parameters:\n    \n    \n    # These are equivalent\n    permute(x, (2, 1, 0))\n    permute(x, 2, 1, 0)\n    \n\n[`trans()`](triton.language.trans.html#triton.language.trans \"triton.language.trans\") is equivalent to this function, except when `dims` is empty, it tries to swap the last two axes.\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.permute(...)` instead of `permute(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "3a7f9604",
+            "content": "# triton.language.make_block_ptr\u00b6\n\ntriton.language.make_block_ptr(_base : [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")_, _shape_ , _strides_ , _offsets_ , _block_shape_ , _order_ , __semantic =None_)\u00b6\n    \n\nReturns a pointer to a block in a parent tensor\n\nParameters:\n    \n\n  * **base** \u2013 The base pointer to the parent tensor\n\n  * **shape** \u2013 The shape of the parent tensor\n\n  * **strides** \u2013 The strides of the parent tensor\n\n  * **offsets** \u2013 The offsets to the block\n\n  * **block_shape** \u2013 The shape of the block\n\n  * **order** \u2013 The order of the original data format\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "14d0acf4",
+            "content": "# triton.language.extra.cuda.gdc_launch_dependents\u00b6  \n  \ntriton.language.extra.cuda.gdc_launch_dependents(__semantic =None_)\u00b6\n    \n\nThis operation when launched with programmatic dependent launch signals that the next program may launch once all programs in the current kernel call this function or complete.\n\nRepeated calls to this function have no effect past the first call, and the first call should be treated by the programmer as a hint to the runtime system to launch the next kernel.\n\nThis instruction is also safe to execute when programmatic dependent launch is disabled.\n\nSee <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-griddepcontrol> for more details.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "30a87390",
+            "content": "# triton.language.associative_scan\u00b6\n\ntriton.language.associative_scan(_input_ , _axis_ , _combine_fn_ , _reverse =False_, __semantic =None_, __generator =None_)\u00b6\n    \n\nApplies the combine_fn to each elements with a carry in `input` tensors along the provided `axis` and update the carry\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input tensor, or tuple of tensors\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done\n\n  * **combine_fn** (_Callable_) \u2013 a function to combine two groups of scalar tensors (must be marked with @triton.jit)\n\n  * **reverse** (_bool_) \u2013 whether to apply the associative scan in the reverse direction along axis\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.associative_scan(...)` instead of `associative_scan(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7edeb2d1",
+            "content": "# triton.language.static_print\u00b6\n\ntriton.language.static_print(_* values_, _sep : str = ' '_, _end : str = '\\n'_, _file =None_, _flush =False_, __semantic =None_)\u00b6\n    \n\nPrint the values at compile time. The parameters are the same as the builtin `print`.\n\nNOTE: Calling the Python builtin `print` is not the same as calling this, it instead maps to `device_print`, which has special requirements for the arguments.\n    \n    \n    tl.static_print(f\"BLOCK_SIZE={BLOCK_SIZE}\")\n    \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "32c1bc7d",
+            "content": "# triton.language.join\u00b6\n\ntriton.language.join(_a_ , _b_ , __semantic =None_)\u00b6\n    \n\nJoin the given tensors in a new, minor dimension.\n\nFor example, given two tensors of shape (4,8), produces a new tensor of shape (4,8,2). Given two scalars, returns a tensor of shape (2).\n\nThe two inputs are broadcasted to be the same shape.\n\nIf you want to join more than two elements, you can use multiple calls to this function. This reflects the constraint in Triton that tensors must have power-of-two sizes.\n\njoin is the inverse of split.\n\nParameters:\n    \n\n  * **a** (_Tensor_) \u2013 The first input tensor.\n\n  * **b** (_Tensor_) \u2013 The second input tensor.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "e41c4575",
+            "content": "# triton.language.fma\u00b6\n\ntriton.language.fma(_x_ , _y_ , _z_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise fused multiply-add of `x`, `y`, and `z`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input values\n\n  * **y** (_Block_) \u2013 the input values\n\n  * **z** (_Block_) \u2013 the input values\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fb39b9c9",
+            "content": "# triton.language.max_contiguous\u00b6\n\ntriton.language.max_contiguous(_input_ , _values_ , __semantic =None_)\u00b6\n    \n\nLet the compiler know that the value first values in `input` are contiguous.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fb687529",
+            "content": "# triton.language.assume\u00b6  \n  \ntriton.language.assume(_cond_ , __semantic =None_)\u00b6\n    \n\nAllow compiler to assume the `cond` is True.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2d405560",
+            "content": "# triton.language.tensor_descriptor\u00b6\n\n_class _triton.language.tensor_descriptor(_self_ , _handle_ , _shape : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _strides : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _block_type : block_type_)\u00b6\n    \n\nA descriptor representing a tensor in global memory.\n\n__init__(_self_ , _handle_ , _shape : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _strides : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _block_type : block_type_)\u00b6\n    \n\nNot called by user code.\n\nMethods\n\n`__init__`(self, handle, shape, strides, ...) | Not called by user code.  \n---|---  \n`atomic_add`(self, offsets, value[, _semantic]) |   \n`atomic_and`(self, offsets, value[, _semantic]) |   \n`atomic_max`(self, offsets, value[, _semantic]) |   \n`atomic_min`(self, offsets, value[, _semantic]) |   \n`atomic_or`(self, offsets, value[, _semantic]) |   \n`atomic_xor`(self, offsets, value[, _semantic]) |   \n`gather`(self, *args[, _semantic]) | Gather multiple descriptors worth of data  \n`load`(self, offsets[, _semantic]) | Load a block from the descriptor starting at the given element offsets.  \n`scatter`(self, value, *args[, _semantic]) | Scatter multiple descriptors worth of data  \n`store`(self, offsets, value[, _semantic]) | Store a block from the descriptor starting at the given element offsets.  \n  \nAttributes\n\n`block_shape` |   \n---|---  \n`block_type` |   \n`dtype` |   \n`type` | \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "bf62d434",
+            "content": "# triton.language.rsqrt\u00b6\n\ntriton.language.rsqrt(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise inverse square root of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "817d7a92",
+            "content": "# triton.language.fdiv\u00b6\n\ntriton.language.fdiv(_x_ , _y_ , _ieee_rounding =False_, __semantic =None_)\u00b6\n    \n\nComputes the element-wise fast division of `x` and `y`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input values\n\n  * **y** (_Block_) \u2013 the input values\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "e8e77684",
+            "content": "# triton.language.erf\u00b6\n\ntriton.language.erf(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise error function of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9168d975",
+            "content": "# triton.language.range\u00b6\n\n_class _triton.language.range(_self_ , _arg1_ , _arg2 =None_, _step =None_, _num_stages =None_, _loop_unroll_factor =None_, _disallow_acc_multi_buffer =False_, _flatten =False_, _warp_specialize =False_, _disable_licm =False_)\u00b6\n    \n\nIterator that counts upward forever.\n    \n    \n    @triton.jit\n    def kernel(...):\n        for i in tl.range(10, num_stages=3):\n            ...\n    \n\nNote:\n    \n\nThis is a special iterator used to implement similar semantics to Python\u2019s `range` in the context of `triton.jit` functions. In addition, it allows user to pass extra attributes to the compiler.\n\nParameters:\n    \n\n  * **arg1** \u2013 the start value.\n\n  * **arg2** \u2013 the end value.\n\n  * **step** \u2013 the step value.\n\n  * **num_stages** \u2013 \n\npipeline the loop into this many stages (so there are `num_stages` iterations of the loop in flight at once).\n\nNote this is subtly different than passing `num_stages` as a kernel argument. The kernel argument only pipelines loads that feed into `dot` operations, while this attribute tries to pipeline most (though not all) loads in this loop.\n\n  * **loop_unroll_factor** \u2013 Tells the Triton IR level loop unroller how many times to unroll a for loop that this range is used with. Less than 2 for this value implies no unrolling.\n\n  * **disallow_acc_multi_buffer** \u2013 If true, prevent the accumulator of the dot operation in the loop to be multi-buffered, if applicable.\n\n  * **flatten** \u2013 automatically flatten the loop nest starting at this loop to create a single flattened loop. The compiler will try to pipeline the flattened loop which can avoid stage stalling.\n\n  * **warp_specialize** \u2013 Enable automatic warp specialization on the loop. The compiler will attempt to partition memory, MMA, and vector operations in the loop into separate async partitions. This will increase the total number of warps required by the kernel.\n\n  * **disable_licm** \u2013 \n\nTells the compiler it shouldn\u2019t hoist loop invariant code outside the loop. This is often useful to avoid creating long liveranges within a loop.\n\nNote that warp specialization is only supported on Blackwell GPUs and only works on simple matmul loops. Support for arbitrary loops will be expanded over time.\n\n\n\n\n__init__(_self_ , _arg1_ , _arg2 =None_, _step =None_, _num_stages =None_, _loop_unroll_factor =None_, _disallow_acc_multi_buffer =False_, _flatten =False_, _warp_specialize =False_, _disable_licm =False_)\u00b6\n    \n\nMethods\n\n`__init__`(self, arg1[, arg2, step, ...]) |   \n---|---  \n  \nAttributes\n\n`type` |   \n---|---\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "c1581f24",
+            "content": "# triton.language.store_tensor_descriptor\u00b6\n\ntriton.language.store_tensor_descriptor(_desc : tensor_descriptor_base_, _offsets : Sequence[constexpr | [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _value : [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")_, __semantic =None_) \u2192 [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")\u00b6\n    \n\nStore a block of data to a tensor descriptor.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f6bdceea",
+            "content": "# triton.language.floor\u00b6\n\ntriton.language.floor(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise floor of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "ccb37866",
+            "content": "# triton.language.interleave\u00b6\n\ntriton.language.interleave(_a_ , _b_)\u00b6\n    \n\nInterleaves the values of two tensors along their last dimension. The two tensors must have the same shape. Equivalent to tl.join(a, b).reshape(a.shape[:-1] + [2 * a.shape[-1]])\n\nParameters:\n    \n\n  * **a** (_Tensor_) \u2013 The first input tensor.\n\n  * **b** (_Tensor_) \u2013 The second input tensor.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "11f3e1f2",
+            "content": "# triton.language.atomic_max\u00b6\n\ntriton.language.atomic_max(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic max at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_max(...)` instead of `atomic_max(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "c493ca84",
+            "content": "# triton.language.minimum\u00b6\n\ntriton.language.minimum(_x_ , _y_ , _propagate_nan: ~triton.language.core.constexpr = <PROPAGATE_NAN.NONE: 0>_, __semantic=None_)\u00b6\n    \n\nComputes the element-wise minimum of `x` and `y`.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the first input tensor\n\n  * **y** (_Block_) \u2013 the second input tensor\n\n  * **propagate_nan** (_tl.PropagateNan_) \u2013 whether to propagate NaN values.\n\n\n\n\nSee also\n\n`tl.PropagateNan`\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "1e5bc68d",
+            "content": "# triton.language.cumsum\u00b6\n\ntriton.language.cumsum(_input_ , _axis =0_, _reverse =False_, _dtype : constexpr | None = None_)\u00b6\n    \n\nReturns the cumsum of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the scan should be done\n\n  * **reverse** (_bool_) \u2013 if true, the scan is performed in the reverse direction\n\n  * **dtype** (_tl.dtype_) \u2013 the desired data type of the returned tensor. If specified, the input tensor is casted to `dtype` before the operation is performed. If not specified, small integer types (< 32 bits) are upcasted to prevent overflow. Note that `tl.bfloat16` inputs are automatically promoted to `tl.float32`.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.cumsum(...)` instead of `cumsum(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "cd5cab70",
+            "content": "# triton.language.arange\u00b6\n\ntriton.language.arange(_start_ , _end_ , __semantic =None_)\u00b6\n    \n\nReturns contiguous values within the half-open interval `[start, end)`. `end - start` must be less than or equal to `TRITON_MAX_TENSOR_NUMEL = 1048576`\n\nParameters:\n    \n\n  * **start** (_int32_) \u2013 Start of the interval. Must be a power of two.\n\n  * **end** (_int32_) \u2013 End of the interval. Must be a power of two greater than `start`.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "e9691187",
+            "content": "# triton.language.min\u00b6\n\ntriton.language.min(_input_ , _axis =None_, _return_indices =False_, _return_indices_tie_break_left =True_, _keep_dims =False_)\u00b6\n    \n\nReturns the minimum of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n  * **return_indices** (_bool_) \u2013 if true, return index corresponding to the minimum value\n\n  * **return_indices_tie_break_left** (_bool_) \u2013 if true, in case of a tie (i.e., multiple elements have the same minimum value), return the left-most index for values that aren\u2019t NaN\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.min(...)` instead of `min(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "ce1c7e3b",
+            "content": "# triton.language.max\u00b6\n\ntriton.language.max(_input_ , _axis =None_, _return_indices =False_, _return_indices_tie_break_left =True_, _keep_dims =False_)\u00b6\n    \n\nReturns the maximum of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n  * **return_indices** (_bool_) \u2013 if true, return index corresponding to the maximum value\n\n  * **return_indices_tie_break_left** (_bool_) \u2013 if true, in case of a tie (i.e., multiple elements have the same maximum value), return the left-most index for values that aren\u2019t NaN\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.max(...)` instead of `max(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "bca868ef",
+            "content": "# Triton Semantics\u00b6\n\nTriton mostly follows the semantics of NumPy with minor exceptions. In this document, we go over some of the array computing features supported in Triton, and we cover the exceptions where Triton\u2019s semantics deviate from that NumPy.\n\n## Type Promotion\u00b6\n\n**Type Promotion** occurs when tensors of different data types are used in an operation. For binary operations associated to [dunder methods](https://docs.python.org/3/reference/datamodel.html#emulating-numeric-types) and the ternary function `tl.where` on its last two arguments, Triton automatically converts the input tensors to a common data type following a hierarchy of kinds (sets of dtypes): `{bool} < {integral dypes} < {floating point dtypes}`.\n\nThe algorithm is as follows:\n\n  1. **Kind** If one tensor is of a dtype of a higher kind, the other tensor is promoted to this dtype: `(int32, bfloat16) -> bfloat16`\n\n  2. **Width** If both tensors are of dtypes of the same kind, and one of them is of a higher width, the other one is promoted to this dtype: `(float32, float16) -> float32`\n\n  3. **Prefer float16** If both tensors are of the same width and signedness but different dtypes (`float16` and `bfloat16` or different `fp8` types), they are both promoted to `float16`. `(float16, bfloat16) -> float16`\n\n  4. **Prefer unsigned** Otherwise (same width, different signedness), they are promoted to the unsigned dtype: `(int32, uint32) -> uint32`\n\n\n\n\nThe rules are a bit different when they involve a scalar. By scalar here we mean a numeric literal, a variable marked with tl.constexpr or a combination of these. These are represented by NumPy scalars and have types `bool`, `int` and `float`.\n\nWhen an operation involves a tensor and a scalar:\n\n  1. If the scalar is of a kind lower or equal to the tensor, it will not participate in the promotion: `(uint8, int) -> uint8`\n\n  2. If the scalar is of a higher kind, we choose the lowest dtype in which it fits among `int32` < `uint32` < `int64` < `uint64` for ints and `float32` < `float64` for floats. Then, both the tensor and the scalar are promoted to this dtype: `(int16, 4.0) -> float32`\n\n\n\n\n## Broadcasting\u00b6\n\n**Broadcasting** allows operations on tensors of different shapes by automatically expanding their shapes to a compatible size without copying the data. This follows the following rules:\n\n  1. If one of the tensor shapes is shorter, pad it on the left with ones until both tensors have the same number of dimensions: `((3, 4), (5, 3, 4)) -> ((1, 3, 4), (5, 3, 4))`\n\n  2. Two dimensions are compatible if they are equal, or if one of them is 1. A dimension of 1 will be expanded to match the dimension of the other tensor. `((1, 3, 4), (5, 3, 4)) -> ((5, 3, 4), (5, 3, 4))`\n\n\n\n\n## Differences with NumPy\u00b6\n\n**C rounding in integer division** Operators in Triton follow C semantics rather than Python semantics for efficiency. As such, `int // int` implements [rounding towards zero as in C](https://en.wikipedia.org/wiki/Modulo#In_programming_languages) for integers of mixed signs, rather than rounding towards minus infinity as in Python. For the same reason, the modulus operator `int % int` (which is defined as `a % b = a - b * (a // b)`) also follows C semantics rather than Python semantics.\n\nPerhaps confusingly, integer division and modulus follow Python semantics for computations where all the inputs are scalars.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "54f4025e",
+            "content": "# triton.language.atomic_and\u00b6\n\ntriton.language.atomic_and(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic logical and at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_and(...)` instead of `atomic_and(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "c8d38f4c",
+            "content": "# triton.jit\u00b6\n\ntriton.jit(_fn : T_) \u2192 JITFunction[T]\u00b6\ntriton.jit(_*_ , _version =None_, _repr : Callable | None = None_, _launch_metadata : Callable | None = None_, _do_not_specialize : Iterable[int | str] | None = None_, _do_not_specialize_on_alignment : Iterable[int | str] | None = None_, _debug : bool | None = None_, _noinline : bool | None = None_) \u2192 Callable[[T], JITFunction[T]]\n    \n\nDecorator for JIT-compiling a function using the Triton compiler.\n\nNote:\n    \n\nWhen a jit\u2019d function is called, arguments are implicitly converted to pointers if they have a `.data_ptr()` method and a .dtype attribute.\n\nNote:\n    \n\nThis function will be compiled and run on the GPU. It will only have access to:\n\n  * python primitives,\n\n  * builtins within the triton package,\n\n  * arguments to this function,\n\n  * other jit\u2019d functions\n\n\n\nParameters:\n    \n\n**fn** (_Callable_) \u2013 the function to be jit-compiled\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "fc3eec75",
+            "content": "# triton.language.static_assert\u00b6\n\ntriton.language.static_assert(_cond_ , _msg =''_, __semantic =None_)\u00b6\n    \n\nAssert the condition at compile time. Does not require that the `TRITON_DEBUG` environment variable is set.\n    \n    \n    tl.static_assert(BLOCK_SIZE == 1024)\n    \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "32a1eeb5",
+            "content": "# triton.language.view\u00b6  \n  \ntriton.language.view(_input_ , _* shape_, __semantic =None_)\u00b6\n    \n\nReturns a tensor with the same elements as input but a different shape. The order of the elements may not be preserved.\n\nParameters:\n    \n\n  * **input** (_Block_) \u2013 The input tensor.\n\n  * **shape** \u2013 The desired shape.\n\n\n\n\n`shape` can be passed as a tuple or as individual parameters:\n    \n    \n    # These are equivalent\n    view(x, (32, 32))\n    view(x, 32, 32)\n    \n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.view(...)` instead of `view(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7620c094",
+            "content": "# triton.language.load\u00b6\n\ntriton.language.load(_pointer_ , _mask =None_, _other =None_, _boundary_check =()_, _padding_option =''_, _cache_modifier =''_, _eviction_policy =''_, _volatile =False_, __semantic =None_)\u00b6\n    \n\nReturn a tensor of data whose values are loaded from memory at location defined by pointer:\n\n>   1. If pointer is a single element pointer, a scalar is be loaded. In this case:\n> \n>      * mask and other must also be scalars,\n> \n>      * other is implicitly typecast to pointer.dtype.element_ty, and\n> \n>      * boundary_check and padding_option must be empty.\n> \n>   2. If pointer is an N-dimensional tensor of pointers, an N-dimensional tensor is loaded. In this case:\n> \n>      * mask and other are implicitly broadcast to pointer.shape,\n> \n>      * other is implicitly typecast to pointer.dtype.element_ty, and\n> \n>      * boundary_check and padding_option must be empty.\n> \n>   3. If pointer is a block pointer defined by make_block_ptr, a tensor is loaded. In this case:\n> \n>      * mask and other must be None, and\n> \n>      * boundary_check and padding_option can be specified to control the behavior of out-of-bound access.\n> \n> \n\n\nParameters:\n    \n\n  * **pointer** (triton.PointerType, or block of dtype=triton.PointerType) \u2013 Pointer to the data to be loaded\n\n  * **mask** (Block of triton.int1, optional) \u2013 if mask[idx] is false, do not load the data at address pointer[idx] (must be None with block pointers)\n\n  * **other** (_Block_ _,__optional_) \u2013 if mask[idx] is false, return other[idx]\n\n  * **boundary_check** (_tuple_ _of_ _ints_ _,__optional_) \u2013 tuple of integers, indicating the dimensions which should do the boundary check\n\n  * **padding_option** \u2013 should be one of {\u201c\u201d, \u201czero\u201d, \u201cnan\u201d}, the padding value to use while out of bounds. \u201c\u201d means an undefined value.\n\n  * **cache_modifier** (str, optional, should be one of {\u201c\u201d, \u201c.ca\u201d, \u201c.cg\u201d, \u201c.cv\u201d}, where \u201c.ca\u201d stands for cache at all levels, \u201c.cg\u201d stands for cache at global level (cache in L2 and below, not L1), and \u201c.cv\u201d means don\u2019t cache and fetch again. see [cache operator](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#cache-operators) for more details.) \u2013 changes cache option in NVIDIA PTX\n\n  * **eviction_policy** (_str_ _,__optional_) \u2013 changes eviction policy in NVIDIA PTX\n\n  * **volatile** (_bool_ _,__optional_) \u2013 changes volatile option in NVIDIA PTX\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4700738c",
+            "content": "# triton.language.cast\u00b6\n\ntriton.language.cast(_input_ , _dtype : dtype_, _fp_downcast_rounding : str | None = None_, _bitcast : bool = False_, __semantic =None_)\u00b6\n    \n\nCasts a tensor to the given `dtype`.\n\nParameters:\n    \n\n  * **dtype** (_tl.dtype_) \u2013 The target data type.\n\n  * **fp_downcast_rounding** (_str_ _,__optional_) \u2013 The rounding mode for downcasting floating-point values. This parameter is only used when self is a floating-point tensor and dtype is a floating-point type with a smaller bitwidth. Supported values are `\"rtne\"` (round to nearest, ties to even) and `\"rtz\"` (round towards zero).\n\n  * **bitcast** (_bool_ _,__optional_) \u2013 If true, the tensor is bitcasted to the given `dtype`, instead of being numerically casted.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.cast(...)` instead of `cast(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "90d96330",
+            "content": "# triton.language.cumprod\u00b6\n\ntriton.language.cumprod(_input_ , _axis =0_, _reverse =False_)\u00b6\n    \n\nReturns the cumprod of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the scan should be done\n\n  * **reverse** (_bool_) \u2013 if true, the scan is performed in the reverse direction\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.cumprod(...)` instead of `cumprod(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "23bc6e8e",
+            "content": "# triton.language.sin\u00b6\n\ntriton.language.sin(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise sine of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4a5103fd",
+            "content": "# triton.language.swizzle2d\u00b6\n\ntriton.language.swizzle2d(_i_ , _j_ , _size_i_ , _size_j_ , _size_g_)\u00b6\n    \n\nTransforms the indices of a row-major size_i * size_j matrix into the indices of a column-major matrix for each group of size_g rows.\n\nFor example, for `size_i = size_j = 4` and `size_g = 2`, it will transform\n    \n    \n    [[0 , 1 , 2 , 3 ],\n     [4 , 5 , 6 , 7 ],\n     [8 , 9 , 10, 11],\n     [12, 13, 14, 15]]\n    \n\ninto\n    \n    \n    [[0, 2,  4 , 6 ],\n     [1, 3,  5 , 7 ],\n     [8, 10, 12, 14],\n     [9, 11, 13, 15]]\n    \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7e35306a",
+            "content": "# triton.language.sigmoid\u00b6\n\ntriton.language.sigmoid(_x_)\u00b6\n    \n\nComputes the element-wise sigmoid of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.sigmoid(...)` instead of `sigmoid(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "a415fff8",
+            "content": "# triton.testing.Benchmark\u00b6\n\n_class _triton.testing.Benchmark(_self_ , _x_names : List[str]_, _x_vals : List[Any]_, _line_arg : str_, _line_vals : List[Any]_, _line_names : List[str]_, _plot_name : str_, _args : Dict[str, Any]_, _xlabel : str = ''_, _ylabel : str = ''_, _x_log : bool = False_, _y_log : bool = False_, _styles =None_)\u00b6\n    \n\nThis class is used by the `perf_report` function to generate line plots with a concise API.\n\n__init__(_self_ , _x_names : List[str]_, _x_vals : List[Any]_, _line_arg : str_, _line_vals : List[Any]_, _line_names : List[str]_, _plot_name : str_, _args : Dict[str, Any]_, _xlabel : str = ''_, _ylabel : str = ''_, _x_log : bool = False_, _y_log : bool = False_, _styles =None_)\u00b6\n    \n\nConstructor. x_vals can be a list of scalars or a list of tuples/lists. If x_vals is a list of scalars and there are multiple x_names, all arguments will have the same value. If x_vals is a list of tuples/lists, each element should have the same length as x_names.\n\nParameters:\n    \n\n  * **x_names** (_List_ _[__str_ _]_) \u2013 Name of the arguments that should appear on the x axis of the plot.\n\n  * **x_vals** (_List_ _[__Any_ _]_) \u2013 List of values to use for the arguments in `x_names`.\n\n  * **line_arg** (_str_) \u2013 Argument name for which different values correspond to different lines in the plot.\n\n  * **line_vals** (_List_ _[__Any_ _]_) \u2013 List of values to use for the arguments in `line_arg`.\n\n  * **line_names** (_List_ _[__str_ _]_) \u2013 Label names for the different lines.\n\n  * **plot_name** (_str_) \u2013 Name of the plot.\n\n  * **args** (_Dict_ _[__str_ _,__Any_ _]_) \u2013 Dictionary of keyword arguments to remain fixed throughout the benchmark.\n\n  * **xlabel** (_str_ _,__optional_) \u2013 Label for the x axis of the plot.\n\n  * **ylabel** (_str_ _,__optional_) \u2013 Label for the y axis of the plot.\n\n  * **x_log** (_bool_ _,__optional_) \u2013 Whether the x axis should be log scale.\n\n  * **y_log** (_bool_ _,__optional_) \u2013 Whether the y axis should be log scale.\n\n  * **styles** (_list_ _[__tuple_ _[__str_ _,__str_ _]__]_) \u2013 A list of tuples, where each tuple contains two elements: a color and a linestyle.\n\n\n\n\nMethods\n\n`__init__`(self, x_names, x_vals, line_arg, ...) | Constructor.  \n---|---\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "250e047a",
+            "content": "# triton.language.cdiv\u00b6\n\ntriton.language.cdiv(_x_ , _div_)\u00b6\n    \n\nComputes the ceiling division of `x` by `div`\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input number\n\n  * **div** (_Block_) \u2013 the divisor\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.cdiv(...)` instead of `cdiv(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "e0e6eaab",
+            "content": "# triton.language.broadcast\u00b6\n\ntriton.language.broadcast(_input_ , _other_ , __semantic =None_)\u00b6\n    \n\nTries to broadcast the two given blocks to a common compatible shape.\n\nParameters:\n    \n\n  * **input** (_Block_) \u2013 The first input tensor.\n\n  * **other** (_Block_) \u2013 The second input tensor.\n\n\n\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "de737e54",
+            "content": "# triton.language.zeros_like\u00b6\n\ntriton.language.zeros_like(_input_)\u00b6\n    \n\nReturns a tensor of zeros with the same shape and type as a given tensor.\n\nParameters:\n    \n\n**input** (_Tensor_) \u2013 input tensor\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2080ceed",
+            "content": "# triton.language.debug_barrier\u00b6\n\ntriton.language.debug_barrier(__semantic =None_)\u00b6\n    \n\nInsert a barrier to synchronize all threads in a block.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2fdc449a",
+            "content": "# triton.language.atomic_xor\u00b6\n\ntriton.language.atomic_xor(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic logical xor at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_xor(...)` instead of `atomic_xor(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f6e14ffa",
+            "content": "# triton.language.make_tensor_descriptor\u00b6\n\ntriton.language.make_tensor_descriptor(_base : [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")_, _shape : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _strides : List[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, _block_shape : List[constexpr]_, _padding_option ='zero'_, __semantic =None_) \u2192 [tensor_descriptor](triton.language.tensor_descriptor.html#triton.language.tensor_descriptor \"triton.language.core.tensor_descriptor\")\u00b6\n    \n\nMake a tensor descriptor object\n\nParameters:\n    \n\n  * **base** \u2013 the base pointer of the tensor, must be 16-byte aligned\n\n  * **shape** \u2013 A list of non-negative integers representing the tensor shape\n\n  * **strides** \u2013 A list of tensor strides. Leading dimensions must be multiples of 16-byte strides and the last dimension must be contiguous.\n\n  * **block_shape** \u2013 The shape of block to be loaded/stored from global memory\n\n\n\n\nNotes\n\nOn NVIDIA GPUs with TMA support, this will result in a TMA descriptor object and loads and stores from the descriptor will be backed by the TMA hardware.\n\nCurrently only 2-5 dimensional tensors are supported.\n\nExample\n    \n    \n    @triton.jit\n    def inplace_abs(in_out_ptr, M, N, M_BLOCK: tl.constexpr, N_BLOCK: tl.constexpr):\n        desc = tl.make_tensor_descriptor(\n            in_out_ptr,\n            shape=[M, N],\n            strides=[N, 1],\n            block_shape=[M_BLOCK, N_BLOCK],\n        )\n    \n        moffset = tl.program_id(0) * M_BLOCK\n        noffset = tl.program_id(1) * N_BLOCK\n    \n        value = desc.load([moffset, noffset])\n        desc.store([moffset, noffset], tl.abs(value))\n    \n    # TMA descriptors require a global memory allocation\n    def alloc_fn(size: int, alignment: int, stream: Optional[int]):\n        return torch.empty(size, device=\"cuda\", dtype=torch.int8)\n    \n    triton.set_allocator(alloc_fn)\n    \n    M, N = 256, 256\n    x = torch.randn(M, N, device=\"cuda\")\n    M_BLOCK, N_BLOCK = 32, 32\n    grid = (M / M_BLOCK, N / N_BLOCK)\n    inplace_abs[grid](x, M, N, M_BLOCK, N_BLOCK)\n    \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9282ea48",
+            "content": "# triton.language.trans\u00b6\n\ntriton.language.trans(_input : [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")_, _* dims_, __semantic =None_)\u00b6\n    \n\nPermutes the dimensions of a tensor.\n\nIf the parameter `dims` is not specified, the function defaults to swapping the last two axes, thereby performing an (optionally batched) 2D transpose.\n\nParameters:\n    \n\n  * **input** \u2013 The input tensor.\n\n  * **dims** \u2013 The desired ordering of dimensions. For example, `(2, 1, 0)` reverses the order dims in a 3D tensor.\n\n\n\n\n`dims` can be passed as a tuple or as individual parameters:\n    \n    \n    # These are equivalent\n    trans(x, (2, 1, 0))\n    trans(x, 2, 1, 0)\n    \n\n[`permute()`](triton.language.permute.html#triton.language.permute \"triton.language.permute\") is equivalent to this function, except it doesn\u2019t have the special case when no permutation is specified.\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.trans(...)` instead of `trans(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "d1c1851d",
+            "content": "# triton.language.static_range\u00b6\n\n_class _triton.language.static_range(_self_ , _arg1_ , _arg2 =None_, _step =None_)\u00b6\n    \n\nIterator that counts upward forever.\n    \n    \n    @triton.jit\n    def kernel(...):\n        for i in tl.static_range(10):\n            ...\n    \n\nNote:\n    \n\nThis is a special iterator used to implement similar semantics to Python\u2019s `range` in the context of `triton.jit` functions. In addition, it also guides the compiler to unroll the loop aggressively.\n\nParameters:\n    \n\n  * **arg1** \u2013 the start value.\n\n  * **arg2** \u2013 the end value.\n\n  * **step** \u2013 the step value.\n\n\n\n\n__init__(_self_ , _arg1_ , _arg2 =None_, _step =None_)\u00b6\n    \n\nMethods\n\n`__init__`(self, arg1[, arg2, step]) |   \n---|---  \n  \nAttributes\n\n`type` |   \n---|---\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "b1a58f40",
+            "content": "# triton.language.load_tensor_descriptor\u00b6\n\ntriton.language.load_tensor_descriptor(_desc : tensor_descriptor_base_, _offsets : Sequence[constexpr | [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")]_, __semantic =None_) \u2192 [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.core.tensor\")\u00b6\n    \n\nLoad a block of data from a tensor descriptor.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "bfb0c3ad",
+            "content": "# triton.language.clamp\u00b6\n\ntriton.language.clamp(_x_ , _min_ , _max_ , _propagate_nan: ~triton.language.core.constexpr = <PROPAGATE_NAN.NONE: 0>_, __semantic=None_)\u00b6\n    \n\nClamps the input tensor `x` within the range [min, max]. Behavior when `min` > `max` is undefined.\n\nParameters:\n    \n\n  * **x** (_Block_) \u2013 the input tensor\n\n  * **min** (_Block_) \u2013 the lower bound for clamping\n\n  * **max** (_Block_) \u2013 the upper bound for clamping\n\n  * **propagate_nan** (_tl.PropagateNan_) \u2013 whether to propagate NaN values. Applies only to the `x` tensor. If either `min` or `max` is NaN, the result is undefined.\n\n\n\n\nSee also\n\n`tl.PropagateNan`\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9939ba23",
+            "content": "# triton.Config\u00b6\n\n_class _triton.Config(_self_ , _kwargs_ , _num_warps =4_, _num_stages =3_, _num_ctas =1_, _maxnreg =None_, _pre_hook =None_, _ir_override =None_)\u00b6\n    \n\nAn object that represents a possible kernel configuration for the auto-tuner to try.\n\nVariables:\n    \n\n  * **kwargs** \u2013 a dictionary of meta-parameters to pass to the kernel as keyword arguments.\n\n  * **num_warps** \u2013 the number of warps to use for the kernel when compiled for GPUs. For example, if num_warps=8, then each kernel instance will be automatically parallelized to cooperatively execute using 8 * 32 = 256 threads.\n\n  * **num_stages** \u2013 the number of stages that the compiler should use when software-pipelining loops. Mostly useful for matrix multiplication workloads on SM80+ GPUs.\n\n  * **num_ctas** \u2013 number of blocks in a block cluster. SM90+ only.\n\n  * **maxnreg** \u2013 maximum number of registers one thread can use. Corresponds to ptx .maxnreg directive. Not supported on all platforms.\n\n  * **pre_hook** \u2013 a function that will be called before the kernel is called. Parameters of this function are args.\n\n  * **ir_override** \u2013 filename of a user-defined IR (*.{ttgir|llir|ptx|amdgcn}).\n\n\n\n\n__init__(_self_ , _kwargs_ , _num_warps =4_, _num_stages =3_, _num_ctas =1_, _maxnreg =None_, _pre_hook =None_, _ir_override =None_)\u00b6\n    \n\nMethods\n\n`__init__`(self, kwargs[, num_warps, ...]) |   \n---|---  \n`all_kwargs`(self) | \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "63ac2973",
+            "content": "# triton.language\u00b6  \n  \n## Programming Model\u00b6\n\n[`tensor`](generated/triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\") | Represents an N-dimensional array of values or pointers.  \n---|---  \n[`tensor_descriptor`](generated/triton.language.tensor_descriptor.html#triton.language.tensor_descriptor \"triton.language.tensor_descriptor\") | A descriptor representing a tensor in global memory.  \n[`program_id`](generated/triton.language.program_id.html#triton.language.program_id \"triton.language.program_id\") | Returns the id of the current program instance along the given `axis`.  \n[`num_programs`](generated/triton.language.num_programs.html#triton.language.num_programs \"triton.language.num_programs\") | Returns the number of program instances launched along the given `axis`.  \n  \n## Creation Ops\u00b6\n\n[`arange`](generated/triton.language.arange.html#triton.language.arange \"triton.language.arange\") | Returns contiguous values within the half-open interval `[start, end)`.  \n---|---  \n[`cat`](generated/triton.language.cat.html#triton.language.cat \"triton.language.cat\") | Concatenate the given blocks  \n[`full`](generated/triton.language.full.html#triton.language.full \"triton.language.full\") | Returns a tensor filled with the scalar value for the given `shape` and `dtype`.  \n[`zeros`](generated/triton.language.zeros.html#triton.language.zeros \"triton.language.zeros\") | Returns a tensor filled with the scalar value 0 for the given `shape` and `dtype`.  \n[`zeros_like`](generated/triton.language.zeros_like.html#triton.language.zeros_like \"triton.language.zeros_like\") | Returns a tensor of zeros with the same shape and type as a given tensor.  \n[`cast`](generated/triton.language.cast.html#triton.language.cast \"triton.language.cast\") | Casts a tensor to the given `dtype`.  \n  \n## Shape Manipulation Ops\u00b6\n\n[`broadcast`](generated/triton.language.broadcast.html#triton.language.broadcast \"triton.language.broadcast\") | Tries to broadcast the two given blocks to a common compatible shape.  \n---|---  \n[`broadcast_to`](generated/triton.language.broadcast_to.html#triton.language.broadcast_to \"triton.language.broadcast_to\") | Tries to broadcast the given tensor to a new `shape`.  \n[`expand_dims`](generated/triton.language.expand_dims.html#triton.language.expand_dims \"triton.language.expand_dims\") | Expand the shape of a tensor, by inserting new length-1 dimensions.  \n[`interleave`](generated/triton.language.interleave.html#triton.language.interleave \"triton.language.interleave\") | Interleaves the values of two tensors along their last dimension.  \n[`join`](generated/triton.language.join.html#triton.language.join \"triton.language.join\") | Join the given tensors in a new, minor dimension.  \n[`permute`](generated/triton.language.permute.html#triton.language.permute \"triton.language.permute\") | Permutes the dimensions of a tensor.  \n[`ravel`](generated/triton.language.ravel.html#triton.language.ravel \"triton.language.ravel\") | Returns a contiguous flattened view of `x`.  \n[`reshape`](generated/triton.language.reshape.html#triton.language.reshape \"triton.language.reshape\") | Returns a tensor with the same number of elements as input but with the provided shape.  \n[`split`](generated/triton.language.split.html#triton.language.split \"triton.language.split\") | Split a tensor in two along its last dim, which must have size 2.  \n[`trans`](generated/triton.language.trans.html#triton.language.trans \"triton.language.trans\") | Permutes the dimensions of a tensor.  \n[`view`](generated/triton.language.view.html#triton.language.view \"triton.language.view\") | Returns a tensor with the same elements as input but a different shape.  \n  \n## Linear Algebra Ops\u00b6\n\n[`dot`](generated/triton.language.dot.html#triton.language.dot \"triton.language.dot\") | Returns the matrix product of two blocks.  \n---|---  \n[`dot_scaled`](generated/triton.language.dot_scaled.html#triton.language.dot_scaled \"triton.language.dot_scaled\") | Returns the matrix product of two blocks in microscaling format.  \n  \n## Memory/Pointer Ops\u00b6\n\n[`load`](generated/triton.language.load.html#triton.language.load \"triton.language.load\") | Return a tensor of data whose values are loaded from memory at location defined by pointer:  \n---|---  \n[`store`](generated/triton.language.store.html#triton.language.store \"triton.language.store\") | Store a tensor of data into memory locations defined by pointer.  \n[`make_tensor_descriptor`](generated/triton.language.make_tensor_descriptor.html#triton.language.make_tensor_descriptor \"triton.language.make_tensor_descriptor\") | Make a tensor descriptor object  \n[`load_tensor_descriptor`](generated/triton.language.load_tensor_descriptor.html#triton.language.load_tensor_descriptor \"triton.language.load_tensor_descriptor\") | Load a block of data from a tensor descriptor.  \n[`store_tensor_descriptor`](generated/triton.language.store_tensor_descriptor.html#triton.language.store_tensor_descriptor \"triton.language.store_tensor_descriptor\") | Store a block of data to a tensor descriptor.  \n[`make_block_ptr`](generated/triton.language.make_block_ptr.html#triton.language.make_block_ptr \"triton.language.make_block_ptr\") | Returns a pointer to a block in a parent tensor  \n[`advance`](generated/triton.language.advance.html#triton.language.advance \"triton.language.advance\") | Advance a block pointer  \n  \n## Indexing Ops\u00b6\n\n[`flip`](generated/triton.language.flip.html#triton.language.flip \"triton.language.flip\") | Flips a tensor x along the dimension dim.  \n---|---  \n[`where`](generated/triton.language.where.html#triton.language.where \"triton.language.where\") | Returns a tensor of elements from either `x` or `y`, depending on `condition`.  \n[`swizzle2d`](generated/triton.language.swizzle2d.html#triton.language.swizzle2d \"triton.language.swizzle2d\") | Transforms the indices of a row-major size_i * size_j matrix into the indices of a column-major matrix for each group of size_g rows.  \n  \n## Math Ops\u00b6\n\n[`abs`](generated/triton.language.abs.html#triton.language.abs \"triton.language.abs\") | Computes the element-wise absolute value of `x`.  \n---|---  \n[`cdiv`](generated/triton.language.cdiv.html#triton.language.cdiv \"triton.language.cdiv\") | Computes the ceiling division of `x` by `div`  \n[`ceil`](generated/triton.language.ceil.html#triton.language.ceil \"triton.language.ceil\") | Computes the element-wise ceil of `x`.  \n[`clamp`](generated/triton.language.clamp.html#triton.language.clamp \"triton.language.clamp\") | Clamps the input tensor `x` within the range [min, max].  \n[`cos`](generated/triton.language.cos.html#triton.language.cos \"triton.language.cos\") | Computes the element-wise cosine of `x`.  \n[`div_rn`](generated/triton.language.div_rn.html#triton.language.div_rn \"triton.language.div_rn\") | Computes the element-wise precise division (rounding to nearest wrt the IEEE standard) of `x` and `y`.  \n[`erf`](generated/triton.language.erf.html#triton.language.erf \"triton.language.erf\") | Computes the element-wise error function of `x`.  \n[`exp`](generated/triton.language.exp.html#triton.language.exp \"triton.language.exp\") | Computes the element-wise exponential of `x`.  \n[`exp2`](generated/triton.language.exp2.html#triton.language.exp2 \"triton.language.exp2\") | Computes the element-wise exponential (base 2) of `x`.  \n[`fdiv`](generated/triton.language.fdiv.html#triton.language.fdiv \"triton.language.fdiv\") | Computes the element-wise fast division of `x` and `y`.  \n[`floor`](generated/triton.language.floor.html#triton.language.floor \"triton.language.floor\") | Computes the element-wise floor of `x`.  \n[`fma`](generated/triton.language.fma.html#triton.language.fma \"triton.language.fma\") | Computes the element-wise fused multiply-add of `x`, `y`, and `z`.  \n[`log`](generated/triton.language.log.html#triton.language.log \"triton.language.log\") | Computes the element-wise natural logarithm of `x`.  \n[`log2`](generated/triton.language.log2.html#triton.language.log2 \"triton.language.log2\") | Computes the element-wise logarithm (base 2) of `x`.  \n[`maximum`](generated/triton.language.maximum.html#triton.language.maximum \"triton.language.maximum\") | Computes the element-wise maximum of `x` and `y`.  \n[`minimum`](generated/triton.language.minimum.html#triton.language.minimum \"triton.language.minimum\") | Computes the element-wise minimum of `x` and `y`.  \n[`rsqrt`](generated/triton.language.rsqrt.html#triton.language.rsqrt \"triton.language.rsqrt\") | Computes the element-wise inverse square root of `x`.  \n[`sigmoid`](generated/triton.language.sigmoid.html#triton.language.sigmoid \"triton.language.sigmoid\") | Computes the element-wise sigmoid of `x`.  \n[`sin`](generated/triton.language.sin.html#triton.language.sin \"triton.language.sin\") | Computes the element-wise sine of `x`.  \n[`softmax`](generated/triton.language.softmax.html#triton.language.softmax \"triton.language.softmax\") | Computes the element-wise softmax of `x`.  \n[`sqrt`](generated/triton.language.sqrt.html#triton.language.sqrt \"triton.language.sqrt\") | Computes the element-wise fast square root of `x`.  \n[`sqrt_rn`](generated/triton.language.sqrt_rn.html#triton.language.sqrt_rn \"triton.language.sqrt_rn\") | Computes the element-wise precise square root (rounding to nearest wrt the IEEE standard) of `x`.  \n[`umulhi`](generated/triton.language.umulhi.html#triton.language.umulhi \"triton.language.umulhi\") | Computes the element-wise most significant N bits of the 2N-bit product of `x` and `y`.  \n  \n## Reduction Ops\u00b6\n\n[`argmax`](generated/triton.language.argmax.html#triton.language.argmax \"triton.language.argmax\") | Returns the maximum index of all elements in the `input` tensor along the provided `axis`  \n---|---  \n[`argmin`](generated/triton.language.argmin.html#triton.language.argmin \"triton.language.argmin\") | Returns the minimum index of all elements in the `input` tensor along the provided `axis`  \n[`max`](generated/triton.language.max.html#triton.language.max \"triton.language.max\") | Returns the maximum of all elements in the `input` tensor along the provided `axis`  \n[`min`](generated/triton.language.min.html#triton.language.min \"triton.language.min\") | Returns the minimum of all elements in the `input` tensor along the provided `axis`  \n[`reduce`](generated/triton.language.reduce.html#triton.language.reduce \"triton.language.reduce\") | Applies the combine_fn to all elements in `input` tensors along the provided `axis`  \n[`sum`](generated/triton.language.sum.html#triton.language.sum \"triton.language.sum\") | Returns the sum of all elements in the `input` tensor along the provided `axis`  \n[`xor_sum`](generated/triton.language.xor_sum.html#triton.language.xor_sum \"triton.language.xor_sum\") | Returns the xor sum of all elements in the `input` tensor along the provided `axis`  \n  \n## Scan/Sort Ops\u00b6\n\n[`associative_scan`](generated/triton.language.associative_scan.html#triton.language.associative_scan \"triton.language.associative_scan\") | Applies the combine_fn to each elements with a carry in `input` tensors along the provided `axis` and update the carry  \n---|---  \n[`cumprod`](generated/triton.language.cumprod.html#triton.language.cumprod \"triton.language.cumprod\") | Returns the cumprod of all elements in the `input` tensor along the provided `axis`  \n[`cumsum`](generated/triton.language.cumsum.html#triton.language.cumsum \"triton.language.cumsum\") | Returns the cumsum of all elements in the `input` tensor along the provided `axis`  \n[`histogram`](generated/triton.language.histogram.html#triton.language.histogram \"triton.language.histogram\") | computes an histogram based on input tensor with num_bins bins, the bins have a width of 1 and start at 0.  \n[`sort`](generated/triton.language.sort.html#triton.language.sort \"triton.language.sort\") |   \n[`gather`](generated/triton.language.gather.html#triton.language.gather \"triton.language.gather\") | Gather from a tensor along a given dimension.  \n  \n## Atomic Ops\u00b6\n\n[`atomic_add`](generated/triton.language.atomic_add.html#triton.language.atomic_add \"triton.language.atomic_add\") | Performs an atomic add at the memory location specified by `pointer`.  \n---|---  \n[`atomic_and`](generated/triton.language.atomic_and.html#triton.language.atomic_and \"triton.language.atomic_and\") | Performs an atomic logical and at the memory location specified by `pointer`.  \n[`atomic_cas`](generated/triton.language.atomic_cas.html#triton.language.atomic_cas \"triton.language.atomic_cas\") | Performs an atomic compare-and-swap at the memory location specified by `pointer`.  \n[`atomic_max`](generated/triton.language.atomic_max.html#triton.language.atomic_max \"triton.language.atomic_max\") | Performs an atomic max at the memory location specified by `pointer`.  \n[`atomic_min`](generated/triton.language.atomic_min.html#triton.language.atomic_min \"triton.language.atomic_min\") | Performs an atomic min at the memory location specified by `pointer`.  \n[`atomic_or`](generated/triton.language.atomic_or.html#triton.language.atomic_or \"triton.language.atomic_or\") | Performs an atomic logical or at the memory location specified by `pointer`.  \n[`atomic_xchg`](generated/triton.language.atomic_xchg.html#triton.language.atomic_xchg \"triton.language.atomic_xchg\") | Performs an atomic exchange at the memory location specified by `pointer`.  \n[`atomic_xor`](generated/triton.language.atomic_xor.html#triton.language.atomic_xor \"triton.language.atomic_xor\") | Performs an atomic logical xor at the memory location specified by `pointer`.  \n  \n## Random Number Generation\u00b6\n\n[`randint4x`](generated/triton.language.randint4x.html#triton.language.randint4x \"triton.language.randint4x\") | Given a `seed` scalar and an `offset` block, returns four blocks of random `int32`.  \n---|---  \n[`randint`](generated/triton.language.randint.html#triton.language.randint \"triton.language.randint\") | Given a `seed` scalar and an `offset` block, returns a single block of random `int32`.  \n[`rand`](generated/triton.language.rand.html#triton.language.rand \"triton.language.rand\") | Given a `seed` scalar and an `offset` block, returns a block of random `float32` in \\\\(U(0, 1)\\\\).  \n[`randn`](generated/triton.language.randn.html#triton.language.randn \"triton.language.randn\") | Given a `seed` scalar and an `offset` block, returns a block of random `float32` in \\\\(\\mathcal{N}(0, 1)\\\\).  \n  \n## Iterators\u00b6\n\n[`range`](generated/triton.language.range.html#triton.language.range \"triton.language.range\") | Iterator that counts upward forever.  \n---|---  \n[`static_range`](generated/triton.language.static_range.html#triton.language.static_range \"triton.language.static_range\") | Iterator that counts upward forever.  \n  \n## Inline Assembly\u00b6\n\n[`inline_asm_elementwise`](generated/triton.language.inline_asm_elementwise.html#triton.language.inline_asm_elementwise \"triton.language.inline_asm_elementwise\") | Execute inline assembly over a tensor.  \n---|---  \n  \n## Compiler Hint Ops\u00b6\n\n[`assume`](generated/triton.language.assume.html#triton.language.assume \"triton.language.assume\") | Allow compiler to assume the `cond` is True.  \n---|---  \n[`debug_barrier`](generated/triton.language.debug_barrier.html#triton.language.debug_barrier \"triton.language.debug_barrier\") | Insert a barrier to synchronize all threads in a block.  \n[`max_constancy`](generated/triton.language.max_constancy.html#triton.language.max_constancy \"triton.language.max_constancy\") | Let the compiler know that the value first values in `input` are constant.  \n[`max_contiguous`](generated/triton.language.max_contiguous.html#triton.language.max_contiguous \"triton.language.max_contiguous\") | Let the compiler know that the value first values in `input` are contiguous.  \n[`multiple_of`](generated/triton.language.multiple_of.html#triton.language.multiple_of \"triton.language.multiple_of\") | Let the compiler know that the values in `input` are all multiples of `value`.  \n  \n## Debug Ops\u00b6\n\n[`static_print`](generated/triton.language.static_print.html#triton.language.static_print \"triton.language.static_print\") | Print the values at compile time.  \n---|---  \n[`static_assert`](generated/triton.language.static_assert.html#triton.language.static_assert \"triton.language.static_assert\") | Assert the condition at compile time.  \n[`device_print`](generated/triton.language.device_print.html#triton.language.device_print \"triton.language.device_print\") | Print the values at runtime from the device.  \n[`device_assert`](generated/triton.language.device_assert.html#triton.language.device_assert \"triton.language.device_assert\") | Assert the condition at runtime from the device.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "9d8962d8",
+            "content": "# triton.language.split\u00b6\n\ntriton.language.split(_a_ , __semantic =None_, __generator =None_) \u2192 tuple[[tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), [tensor](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\")]\u00b6\n    \n\nSplit a tensor in two along its last dim, which must have size 2.\n\nFor example, given a tensor of shape (4,8,2), produces two tensors of shape (4,8). Given a tensor of shape (2), returns two scalars.\n\nIf you want to split into more than two pieces, you can use multiple calls to this function (probably plus calling reshape). This reflects the constraint in Triton that tensors must have power-of-two sizes.\n\nsplit is the inverse of join.\n\nParameters:\n    \n\n**a** (_Tensor_) \u2013 The tensor to split.\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.split()` instead of `split(x)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "7ffd32f4",
+            "content": "# triton.language.program_id\u00b6  \n  \ntriton.language.program_id(_axis_ , __semantic =None_)\u00b6\n    \n\nReturns the id of the current program instance along the given `axis`.\n\nParameters:\n    \n\n**axis** (_int_) \u2013 The axis of the 3D launch grid. Must be 0, 1 or 2.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "5b610c1f",
+            "content": "# triton.language.num_programs\u00b6\n\ntriton.language.num_programs(_axis_ , __semantic =None_)\u00b6\n    \n\nReturns the number of program instances launched along the given `axis`.\n\nParameters:\n    \n\n**axis** (_int_) \u2013 The axis of the 3D launch grid. Must be 0, 1 or 2.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "edb65249",
+            "content": "# triton.language.atomic_or\u00b6\n\ntriton.language.atomic_or(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic logical or at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_or(...)` instead of `atomic_or(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "df01b525",
+            "content": "# triton.language.advance\u00b6  \n  \ntriton.language.advance(_base_ , _offsets_ , __semantic =None_)\u00b6\n    \n\nAdvance a block pointer\n\nParameters:\n    \n\n  * **base** \u2013 the block pointer to advance\n\n  * **offsets** \u2013 the offsets to advance, a tuple by dimension\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.advance(...)` instead of `advance(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "0b97f155",
+            "content": "# triton.language.sqrt_rn\u00b6\n\ntriton.language.sqrt_rn(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise precise square root (rounding to nearest wrt the IEEE standard) of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "221101a0",
+            "content": "# triton.language.xor_sum\u00b6\n\ntriton.language.xor_sum(_input_ , _axis =None_, _keep_dims =False_)\u00b6\n    \n\nReturns the xor sum of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.xor_sum(...)` instead of `xor_sum(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "d0386bf6",
+            "content": "# triton.language.sort\u00b6\n\ntriton.language.sort(_x_ , _dim : constexpr | None = None_, _descending : constexpr = constexpr[0]_)\u00b6\n    \n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "485233f0",
+            "content": "# triton.language.argmax\u00b6\n\ntriton.language.argmax(_input_ , _axis_ , _tie_break_left =True_, _keep_dims =False_)\u00b6\n    \n\nReturns the maximum index of all elements in the `input` tensor along the provided `axis`\n\nParameters:\n    \n\n  * **input** (_Tensor_) \u2013 the input values\n\n  * **axis** (_int_) \u2013 the dimension along which the reduction should be done. If None, reduce all dimensions\n\n  * **keep_dims** (_bool_) \u2013 if true, keep the reduced dimensions with length 1\n\n  * **tie_break_left** (_bool_) \u2013 if true, in case of a tie (i.e., multiple elements have the same maximum index value), return the left-most index for values that aren\u2019t NaN\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.argmax(...)` instead of `argmax(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f703bb08",
+            "content": "# triton.language.store\u00b6\n\ntriton.language.store(_pointer_ , _value_ , _mask =None_, _boundary_check =()_, _cache_modifier =''_, _eviction_policy =''_, __semantic =None_)\u00b6\n    \n\nStore a tensor of data into memory locations defined by pointer.\n\n>   1. If pointer is a single element pointer, a scalar is stored. In this case:\n> \n>      * mask must also be scalar, and\n> \n>      * boundary_check and padding_option must be empty.\n> \n>   2. If pointer is an N-dimensional tensor of pointers, an N-dimensional block is stored. In this case:\n> \n>      * mask is implicitly broadcast to pointer.shape, and\n> \n>      * boundary_check must be empty.\n> \n>   3. If pointer is a block pointer defined by make_block_ptr, a block of data is stored. In this case:\n> \n>      * mask must be None, and\n> \n>      * boundary_check can be specified to control the behavior of out-of-bound access.\n> \n> \n\n\nvalue is implicitly broadcast to pointer.shape and typecast to pointer.dtype.element_ty.\n\nParameters:\n    \n\n  * **pointer** (triton.PointerType, or block of dtype=triton.PointerType) \u2013 The memory location where the elements of value are stored\n\n  * **value** (_Block_) \u2013 The tensor of elements to be stored\n\n  * **mask** (_Block_ _of_ _triton.int1_ _,__optional_) \u2013 If mask[idx] is false, do not store value[idx] at pointer[idx]\n\n  * **boundary_check** (_tuple_ _of_ _ints_ _,__optional_) \u2013 tuple of integers, indicating the dimensions which should do the boundary check\n\n  * **cache_modifier** (str, optional, should be one of {\u201c\u201d, \u201c.wb\u201d, \u201c.cg\u201d, \u201c.cs\u201d, \u201c.wt\u201d}, where \u201c.wb\u201d stands for cache write-back all coherent levels, \u201c.cg\u201d stands for cache global, \u201c.cs\u201d stands for cache streaming, \u201c.wt\u201d stands for cache write-through, see [cache operator](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#cache-operators) for more details.) \u2013 changes cache option in NVIDIA PTX\n\n  * **eviction_policy** (_str_ _,__optional_ _,__should be one_ _of_ _{\"\"__,__\"evict_first\"__,__\"evict_last\"}_) \u2013 changes eviction policy in NVIDIA PTX\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.store(...)` instead of `store(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "dd17d5d9",
+            "content": "# triton.language.atomic_min\u00b6\n\ntriton.language.atomic_min(_pointer_ , _val_ , _mask =None_, _sem =None_, _scope =None_, __semantic =None_)\u00b6\n    \n\nPerforms an atomic min at the memory location specified by `pointer`.\n\nReturn the data stored at `pointer` before the atomic operation.\n\nParameters:\n    \n\n  * **pointer** (_Block_ _of_ _dtype=triton.PointerDType_) \u2013 The memory locations to operate on\n\n  * **val** (_Block_ _of_ _dtype=pointer.dtype.element_ty_) \u2013 The values with which to perform the atomic operation\n\n  * **sem** (_str_ _,__optional_) \u2013 Specifies the memory semantics for the operation. Acceptable values are \u201cacquire\u201d, \u201crelease\u201d, \u201cacq_rel\u201d (stands for \u201cACQUIRE_RELEASE\u201d), and \u201crelaxed\u201d. If not provided, the function defaults to using \u201cacq_rel\u201d semantics.\n\n  * **scope** (_str_ _,__optional_) \u2013 Defines the scope of threads that observe the synchronizing effect of the atomic operation. Acceptable values are \u201cgpu\u201d (default), \u201ccta\u201d (cooperative thread array, thread block), or \u201csys\u201d (stands for \u201cSYSTEM\u201d). The default value is \u201cgpu\u201d.\n\n\n\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.atomic_min(...)` instead of `atomic_min(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "709e4c1e",
+            "content": "# triton.language.extra.cuda.gdc_wait\u00b6\n\ntriton.language.extra.cuda.gdc_wait(__semantic =None_)\u00b6\n    \n\nGDC wait is a blocking instruction that waits for all instructions in a prior kernel to complete before continuing. This ensures all memory operations happening before the wait is visible to instructions after it, e.g. if the prior kernel writes to address \u201cx\u201d the new values will be visible in this kernel after the wait.\n\nThis instruction is also safe to execute when programmatic dependent launch is disabled.\n\nSee <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-griddepcontrol> for more details.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "19c1a6aa",
+            "content": "# triton.testing\u00b6\n\n[`Benchmark`](generated/triton.testing.Benchmark.html#triton.testing.Benchmark \"triton.testing.Benchmark\") | This class is used by the `perf_report` function to generate line plots with a concise API.  \n---|---  \n[`do_bench`](generated/triton.testing.do_bench.html#triton.testing.do_bench \"triton.testing.do_bench\") | Benchmark the runtime of the provided function.  \n[`do_bench_cudagraph`](generated/triton.testing.do_bench_cudagraph.html#triton.testing.do_bench_cudagraph \"triton.testing.do_bench_cudagraph\") | Benchmark the runtime of the provided function.  \n[`perf_report`](generated/triton.testing.perf_report.html#triton.testing.perf_report \"triton.testing.perf_report\") | Mark a function for benchmarking.  \n[`assert_close`](generated/triton.testing.assert_close.html#triton.testing.assert_close \"triton.testing.assert_close\") | Asserts that two inputs are close within a certain tolerance.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "f766b247",
+            "content": "# triton.language.softmax\u00b6\n\ntriton.language.softmax(_x_ , _dim =None_, _keep_dims =False_, _ieee_rounding =False_)\u00b6\n    \n\nComputes the element-wise softmax of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.softmax(...)` instead of `softmax(x, ...)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "42ee32c1",
+            "content": "# triton.language.abs\u00b6\n\ntriton.language.abs(_x_ , __semantic =None_)\u00b6\n    \n\nComputes the element-wise absolute value of `x`.\n\nParameters:\n    \n\n**x** (_Block_) \u2013 the input values\n\nThis function can also be called as a member function on [`tensor`](triton.language.tensor.html#triton.language.tensor \"triton.language.tensor\"), as `x.abs()` instead of `abs(x)`.\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "2172b50c",
+            "content": "# triton.language.max_constancy\u00b6\n\ntriton.language.max_constancy(_input_ , _values_ , __semantic =None_)\u00b6\n    \n\nLet the compiler know that the value first values in `input` are constant.\n\ne.g. if `values` is [4], then each group of 4 values in `input` should all be equal, for example [0, 0, 0, 0, 1, 1, 1, 1].\n",
+            "variations": [],
+            "expansions": []
+        },
+        {
+            "id": "4e004284",
+            "content": "# triton\u00b6\n\n[`jit`](generated/triton.jit.html#triton.jit \"triton.jit\") | Decorator for JIT-compiling a function using the Triton compiler.  \n---|---  \n[`autotune`](generated/triton.autotune.html#triton.autotune \"triton.autotune\") | Decorator for auto-tuning a `triton.jit`'d function.  \n[`heuristics`](generated/triton.heuristics.html#triton.heuristics \"triton.heuristics\") | Decorator for specifying how the values of certain meta-parameters may be computed.  \n[`Config`](generated/triton.Config.html#triton.Config \"triton.Config\") | An object that represents a possible kernel configuration for the auto-tuner to try.\n",
+            "variations": [],
+            "expansions": []
+        }
+    ]
+}

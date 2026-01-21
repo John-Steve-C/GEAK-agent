@@ -32,7 +32,7 @@ class CheatsheetManager:
         """Returns the cheatsheet as a JSON string (for storage)."""
         return json.dumps(self.data, indent=4)
 
-    def to_string_for_prompt(self) -> str:
+    def to_string_for_prompt(self, max_items_per_section=5) -> str:
         """
         Formats the cheatsheet for the LLM prompt.
         Crucially, this MUST include IDs so the LLM can reference them 
@@ -45,7 +45,9 @@ class CheatsheetManager:
             if not items:
                 output.append("(Empty)")
             
-            for item in items:
+            # Sliding window: only show last max_items_per_section items instead of all
+            recent_items = items[-max_items_per_section:]
+            for item in recent_items:
                 output.append(f"[ID: {item['id']}] {item['content']}")
                 
                 # Render variations if present
@@ -70,7 +72,8 @@ class CheatsheetManager:
             count = len(self.data.get(section, []))
             stats.append(f"{section}: {count} items")
             total_items += count
-        return f"Total Items: {total_items} | Sections: {', '.join(stats)}"
+        total_length = self.to_string_for_prompt().__len__()
+        return f"Total Items: {total_items} | Sections: {', '.join(stats)} | Total Length: {total_length} characters"
 
     def build_prompt_qa(self, question: str, model_answer: str) -> str:
         """Constructs the final prompt using the user's template."""
@@ -408,13 +411,72 @@ RESPONSE FORMAT (JSON ONLY):
             raw_prompt=raw_prompt
         )
     
-    def prune_length(self, max_items: int = 100):
+    def prune_length(self, max_length: int = 1000000, max_items: int = 100):
         """Prunes the cheatsheet to keep only the most recent items up to max_items."""
-        for section in self.sections:
-            items = self.data.get(section, [])
-            if len(items) > max_items:
-                self.data[section] = items[-max_items:]
-                print(f"Pruned {section} to last {max_items} items.")
+        # for section in self.sections:
+        #     items = self.data.get(section, [])
+        #     if len(items) > max_items:
+        #         self.data[section] = items[-max_items:]
+        #         print(f"Pruned {section} to last {max_items} items.")
+        
+        total_length = self.to_string_for_prompt().__len__()
+        if total_length > max_length:
+            print(f"Pruning cheatsheet from {total_length} to {max_length} characters.")
+            # Simple strategy: remove oldest items across all sections until under limit
+            # You should remove item in different sections in round-robin fashion
+            # except for the meta_reasoning strategy
+            while self.to_string_for_prompt().__len__() > max_length:
+                for section in self.sections:
+                    if section == "meta_reasoning":
+                        continue
+                    items = self.data.get(section, [])
+                    if items:
+                        removed_item = items.pop(0)
+                        print(f" - Removed from {section}: {removed_item['id']}")
+                    if self.to_string_for_prompt().__len__() <= max_length:
+                        break
+
+    def build_prompt_for_pruning(self, target_length: int = 1000000) -> str:
+        """Builds a prompt to ask the LLM to summarize or refine the cheatsheet."""
+        template = """
+You are a master curator of long-term technical knowledge. The current cheatsheet has exceeded the desired {target_length} character limit. Please help summarize or refine the cheatsheet to fit within this limit.
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+**Current Cheatsheet:**
+{cheatsheet}
+
+**Your Task:**
+Output ONLY a valid JSON object with these exact fields:
+- reasoning: brief justification for adding or not adding content
+- operations: list of operations to apply to the cheatsheet
+
+Available Operations:
+
+1. REMOVE
+    - target_id: memory item identifier
+
+2. UPDATE
+   - target_id: memory item identifier
+   - content: refined high-level description
+
+RESPONSE FORMAT (JSON ONLY):
+{{
+  "reasoning": "...",
+  "operations": [
+    {{
+      "type": "REMOVE",
+      "target_id": "item_id_here"
+    }}
+  ]
+}}
+"""
+        return template.format(
+            target_length=target_length,
+            cheatsheet_stats=self.get_stats(),
+            cheatsheet=self.to_string_for_prompt()
+        )
 
     def _find_item_by_id(self, target_id: str):
         """Helper to locate an item and its parent section list."""
@@ -454,6 +516,8 @@ RESPONSE FORMAT (JSON ONLY):
                     self._op_variation(op)
                 elif op_type == "EXPAND":
                     self._op_expand(op)
+                elif op_type == "REMOVE":
+                    self._op_remove(op)
                 # Edge case for misunderstood operation naming
                 elif op_type == "META_REASONING":
                     op.section = "meta_reasoning"
@@ -464,6 +528,9 @@ RESPONSE FORMAT (JSON ONLY):
                 elif op_type == "EDGE_CASES_AND_PITFALLS":
                     op.section = "edge_cases_and_pitfalls"
                     self._op_add(op)  # Treat as ADD to edge_cases_and_pitfalls
+                elif op_type == "API_USAGE":
+                    op.section = "api_usage"
+                    self._op_add(op)  # Treat as ADD to API_usage
                 # last resort: try to infer from content
                 else:
                     print(f"Warning: Unknown operation type {op_type}")
@@ -481,6 +548,7 @@ RESPONSE FORMAT (JSON ONLY):
         
         if section not in self.sections:
             # Fallback if LLM hallucinates a section
+            print(f" ! UNKNOWN SECTION '{section}', defaulting to 'solutions_and_patterns'.")
             section = "solutions_and_patterns"
             
         new_item = {
@@ -530,6 +598,16 @@ RESPONSE FORMAT (JSON ONLY):
             print(f" > EXPANDED {target_id}: {content[:50]}...")
         else:
             print(f" ! FAILED EXPAND: ID {target_id} not found.")
+    
+    def _op_remove(self, op):
+        target_id = op.get("target_id")
+        item, parent_list = self._find_item_by_id(target_id)
+        
+        if item and parent_list is not None:
+            parent_list.remove(item)
+            print(f" - REMOVED {target_id}")
+        else:
+            print(f" ! FAILED REMOVE: ID {target_id} not found.")
 
 # ==========================================
 # Example Usage Flow

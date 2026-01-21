@@ -29,7 +29,11 @@ target_kernels: null
 # output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_reflect_serial_dc.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc.jsonl"
-output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder.jsonl"
+# output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder.jsonl"
+# output_path: "../outputs/test/optimagent_gpt41_mini_api_init_combined_dc_reorder.jsonl"
+# output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_prune.jsonl"
+# output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune.jsonl"
+output_path: "../outputs/test/optimagent_gpt41_mini_api_append.jsonl"
 
 
 max_iteration: 5
