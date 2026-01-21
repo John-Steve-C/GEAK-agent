@@ -18,17 +18,18 @@ class OptimAgent(Reflexion_Oneshot):
         # Lock to protect the shared resource
         self.cheatsheet_lock = Lock()
         # a manager to manage cheatsheet updates in json format
-        with open('./first_cheatsheet.json', 'r') as f:
+        with open('./new_first_cheatsheet.json', 'r') as f:
             cheatsheet_data = json.load(f)
         self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
-        with open('./second_cheatsheet.json', 'r') as f:
-            api_data = json.load(f)
-        self.api_sheet = api_data['api_usage']
-        # convert to string
-        self.api_sheet_str = ""
-        for item in self.api_sheet:
-            self.api_sheet_str += f"* {item['content']}\n"
-        print(self.api_sheet_str)
+        # api_usage only version
+        # with open('./second_cheatsheet.json', 'r') as f:
+        #     api_data = json.load(f)
+        # self.api_sheet = api_data['api_usage']
+        # # convert to string
+        # self.api_sheet_str = ""
+        # for item in self.api_sheet:
+        #     self.api_sheet_str += f"* {item['content']}\n"
+        # print(self.api_sheet_str)
 
     def memory_init(self, mem_file=None):
         """
@@ -41,6 +42,7 @@ class OptimAgent(Reflexion_Oneshot):
                                                              "reflection", 
                                                              "function_signatures",
                                                              "global_cheatsheet",
+                                                             "thoughts",
                                                              "oneshot", 
                                                              "perf_candidates",
                                                              "perf_strategy",
@@ -74,6 +76,7 @@ class OptimAgent(Reflexion_Oneshot):
                                 reflection=None, 
                                 function_signatures=fs_mem,
                                 global_cheatsheet="",
+                                thoughts="",
                                 oneshot=os_mem["code"], 
                                 perf_candidates=[],
                                 perf_strategy=None,
@@ -94,6 +97,7 @@ class OptimAgent(Reflexion_Oneshot):
                     reflection=input_mem["reflection"], 
                     function_signatures=fs_mem, 
                     global_cheatsheet=input_mem["global_cheatsheet"],
+                    thoughts=input_mem["thoughts"],
                     oneshot=input_mem["oneshot"], 
                     perf_candidates=input_mem["perf_candidates"],
                     perf_strategy=input_mem["perf_strategy"],
@@ -117,6 +121,7 @@ class OptimAgent(Reflexion_Oneshot):
                     "exe_err_msg": str(mem.exe_err_msg),
                     "reflection": mem.reflection, 
                     "global_cheatsheet": mem.global_cheatsheet,
+                    "thoughts": mem.thoughts,
                     "oneshot": mem.oneshot, 
                     "perf_candidates": [list(cand) for cand in mem.perf_candidates],
                     "perf_strategy": mem.perf_strategy,
@@ -339,37 +344,43 @@ class OptimAgent(Reflexion_Oneshot):
                     mem.ps.solution = mem.raw_code[0]
 
             # update cheatsheet
-            # logger.info(f"\nupdate cheatsheet")
-            # with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
-            #     # if multi_thread:
-            #     #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
-            #     #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
-            #     #         for future in as_completed(futures):
-            #     #             pbar.update(1)
-            #     # else:
-            #         for mem in self.memories[start_idx:(start_idx + data_len)]:
-            #             self.generate_dc(mem, method="json", temperature=temperature)
-            #             pbar.update(1)
+            logger.info(f"\ncheatsheet record usage")
+            for mem in self.memories[start_idx:(start_idx + data_len)]:
+                self.cheatsheet_manager.record_usage(mem.thoughts, iter)
+            logger.info(f"\nupdate cheatsheet")
+            with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
+                # if multi_thread:
+                #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
+                #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
+                #         for future in as_completed(futures):
+                #             pbar.update(1)
+                # else:
+                    for mem in self.memories[start_idx:(start_idx + data_len)]:
+                        self.generate_dc(mem, method="json", temperature=temperature)
+                        pbar.update(1)
             
             # prune cheatsheet to control length
-            prune_type = "round-robin"
+            prune_type = "utility-based"
             # prune_type = "llm-summarization"
             max_length = 1000000
-            # if self.cheatsheet_manager.to_string_for_prompt().__len__() > max_length:
-            #     logger.info(f"Cheatsheet length {self.cheatsheet_manager.to_string_for_prompt().__len__()} exceeds max length {max_length}, pruning...")
-            #     if prune_type == "round-robin":
-            #         self.cheatsheet_manager.prune_length(max_length=1000000)
-            #     elif prune_type == "llm-summarization":
-            #         prompt = self.cheatsheet_manager.build_prompt_for_pruning(target_length=1000000)
-            #         msg = [
-            #             {"role": "user", "content": prompt},
-            #         ]
-            #         try:
-            #             response = self.model.generate(msg, temperature=1.0, max_tokens=10000)
-            #             self.cheatsheet_manager.apply_operations(response)
-            #             logger.info(f"Cheatsheet pruned via LLM summarization, now stats: {self.cheatsheet_manager.get_stats()}")
-            #         except RetryError as e:
-            #             logger.error(f"LLM call failed during cheatsheet pruning: {e}. Keeping existing cheatsheet.")
+
+            if prune_type == "utility-based":
+                self.cheatsheet_manager.prune_by_utility(min_usage_ratio=0.5, age_threshold=2)
+            elif self.cheatsheet_manager.to_string_for_prompt().__len__() > max_length:
+                logger.info(f"Cheatsheet length {self.cheatsheet_manager.to_string_for_prompt().__len__()} exceeds max length {max_length}, pruning...")
+                if prune_type == "round-robin":
+                    self.cheatsheet_manager.prune_length(max_length=1000000)
+                elif prune_type == "llm-summarization":
+                    prompt = self.cheatsheet_manager.build_prompt_for_pruning(target_length=1000000)
+                    msg = [
+                        {"role": "user", "content": prompt},
+                    ]
+                    try:
+                        response = self.model.generate(msg, temperature=1.0, max_tokens=10000)
+                        self.cheatsheet_manager.apply_operations(response)
+                        logger.info(f"Cheatsheet pruned via LLM summarization, now stats: {self.cheatsheet_manager.get_stats()}")
+                    except RetryError as e:
+                        logger.error(f"LLM call failed during cheatsheet pruning: {e}. Keeping existing cheatsheet.")
             # write intermediate results
             with open(f"{root}_cheatsheet_{iter}.json", "w") as f:
                 json.dump(self.cheatsheet_manager.data, f, indent=4)
@@ -405,7 +416,7 @@ class OptimAgent(Reflexion_Oneshot):
         # )
         # combine generation with re-ordered cheatsheet
         text = prompt_for_generation.prompt_reorder.format(
-            cheatsheet=self.api_sheet_str,
+            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(top_k_hot=-20),  # only use top 20 hot items to generate response
             instruction=mem.ps.instruction,
             function_signatures=fss_text
         )
@@ -456,6 +467,7 @@ class OptimAgent(Reflexion_Oneshot):
                 # text += f"\nHere is the global cheatsheet: {self.global_cheatsheet}"
 
         text += "\nOutput your answer in json format, with the format as follows: {\"thought\": \"\", \"code\": \"\"}. Please strictly output in JSON format."
+        text += "\nThe \"thought\" field contains the explicit cheatsheet IDs you referred to in such a format: [ID1, ID2, ...]."
         text += "\nGenerate the correct and optimized code without explanation, which we can run directly in the \"code\" field."
 
         msg = [
@@ -470,6 +482,7 @@ class OptimAgent(Reflexion_Oneshot):
             
         try:
             mem.raw_code = [clear_code(clear_json(response)["code"])]
+            mem.thoughts = clear_json(response)["thought"]
         except:
             print(f"failed to extract code for {mem.ps.filename}")
             # fail_dir = "failed_to_extract"

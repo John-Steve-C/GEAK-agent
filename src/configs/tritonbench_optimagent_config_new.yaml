@@ -33,8 +33,8 @@ target_kernels: null
 # output_path: "../outputs/test/optimagent_gpt41_mini_api_init_combined_dc_reorder.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_prune.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune.jsonl"
-output_path: "../outputs/test/optimagent_gpt41_mini_api_append.jsonl"
-
+# output_path: "../outputs/test/optimagent_gpt41_mini_api_append.jsonl"
+output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_full_window.jsonl"
 
 max_iteration: 5
 multi_thread: true

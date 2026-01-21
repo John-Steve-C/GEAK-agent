@@ -34,6 +34,7 @@ if __name__ == "__main__":
     # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_prune_mem"
     # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune_mem"
     root = "../outputs/test/optimagent_gpt41_mini_api_append_mem"
+    root = '../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_mem'
 
     flag_pass_exe = [0] * 184   # total 184 samples
     flag_pass_call = [0] * 184
