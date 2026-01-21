@@ -18,9 +18,9 @@ class OptimAgent(Reflexion_Oneshot):
         # Lock to protect the shared resource
         self.cheatsheet_lock = Lock()
         # a manager to manage cheatsheet updates in json format
-        with open('./new_first_cheatsheet.json', 'r') as f:
-            cheatsheet_data = json.load(f)
-        self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+        # with open('./new_first_cheatsheet.json', 'r') as f:
+        #     cheatsheet_data = json.load(f)
+        # self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
         # api_usage only version
         # with open('./second_cheatsheet.json', 'r') as f:
         #     api_data = json.load(f)
@@ -60,6 +60,20 @@ class OptimAgent(Reflexion_Oneshot):
             with open(mem_file, "r") as f:
                 input_mems = json.load(f)
             assert len(input_mems) == len(self.dataset), f"expect {len(self.dataset)} samples, but got {len(input_mems)} instead"
+            
+            # load previous cheatsheet data
+            dc_path = mem_file.replace("_mem_", "_cheatsheet_")
+            assert os.path.exists(dc_path), f"expect cheatsheet file at {dc_path}, but not found"
+            with open(dc_path, "r") as f:
+                cheatsheet_data = json.load(f)
+            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+            print(f"Loaded cheatsheet data from {dc_path}, stat: {self.cheatsheet_manager.get_stats()}")
+        else:
+            # load initial cheatsheet data
+            with open('./new_first_cheatsheet.json', 'r') as f:
+                cheatsheet_data = json.load(f)
+            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+            print(f"Initialized cheatsheet manager with initial data, stat: {self.cheatsheet_manager.get_stats()}")
 
         for ps in self.dataset.problem_states:
             if ps.label:
@@ -416,7 +430,7 @@ class OptimAgent(Reflexion_Oneshot):
         # )
         # combine generation with re-ordered cheatsheet
         text = prompt_for_generation.prompt_reorder.format(
-            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(top_k_hot=-20),  # only use top 20 hot items to generate response
+            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(top_k_hot=20),  # only use top 20 hot items to generate response
             instruction=mem.ps.instruction,
             function_signatures=fss_text
         )

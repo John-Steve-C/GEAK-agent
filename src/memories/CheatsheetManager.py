@@ -455,7 +455,7 @@ RESPONSE FORMAT (JSON ONLY):
         print(f"\n--- Starting Utility Pruning (Iter {self.current_iteration}) ---")
         
         for section in self.sections:
-            if section == "meta_reasoning": continue # 元规则通常保留
+            # if section == "meta_reasoning": continue # 元规则通常保留
             
             original_items = self.data[section]
             keep_items = []
