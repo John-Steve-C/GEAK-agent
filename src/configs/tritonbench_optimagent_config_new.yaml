@@ -1,7 +1,8 @@
 # LLM model
 api_key: ${env:OPENAI_API_KEY}
 # model_id: "dvue-aoai-001-gpt-4.1"
-model_id: "gpt-4.1-mini"
+# model_id: "gpt-4.1-mini"
+model_id: "qwen/qwen3-coder:free"
 temperature: 1.0
 
 
@@ -17,8 +18,8 @@ perf_ref_folder: null
 perf_G_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G"
 py_interpreter: "python"
 result_path: null
-mem_file: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_mem_4.json"
-start_iter: 5
+mem_file: null # "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_mem_4.json"
+start_iter: 0
 datalen: null
 start_idx: 0
 target_kernels: null
@@ -35,10 +36,12 @@ target_kernels: null
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune.jsonl"
 
 # output_path: "../outputs/test/optimagent_gpt41_mini_api_append.jsonl"
-output_path: "../outputs/full/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_continue.jsonl"
+# output_path: "../outputs/full/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_continue.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_all.jsonl"
 
+output_path: "../outputs/full/optimagent_qwen3_coder_origin.jsonl"
+
 max_iteration: 5
-multi_thread: true
+multi_thread: false
 thread_num: 128
 ancestor_num: 5

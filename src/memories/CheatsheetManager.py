@@ -636,9 +636,9 @@ RESPONSE FORMAT (JSON ONLY):
             "id": self._generate_id(),
             "content": content,
             "usage_count": 0,
-            "last_used_iter": -1,      # 最后一次被引用的轮次
-            "created_iter": self.current_iteration, # 创建轮次，用于计算“年龄”
-            "variations": [],          # 变式
+            "last_used_iter": -1,      
+            "created_iter": self.current_iteration, # when this item was created
+            "variations": [],          
             "edge_cases": []           
         }
         self.data[section].append(new_item)
