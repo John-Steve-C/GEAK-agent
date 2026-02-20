@@ -19,6 +19,7 @@ from utils.utils import extract_function_signatures, clear_code, clear_json
 # --- 1. 线程安全的全局内存知识库 ---
 CHEATSHEET_PATH = "tmp_cheatsheet.json"
 DEFAULT_PATH = "new_first_cheatsheet.json"
+OUTPUT_PATH = "triton_run_langchain_tmp"
 
 class ThreadSafeCheatsheetManager:
     """包装原始的 CheatsheetManager，添加线程锁以支持并发操作"""
@@ -67,8 +68,8 @@ def run_test_outside(dataset, code: str, filename: str) -> str:
     try:
         # 【关键修改】基于 filename 生成独立的编译目录，避免多线程冲突
         safe_name = filename.replace(".py", "")
-        tmp_dir = f"triton_run_langchain_tmp/tmp_{safe_name}"
-        exe_dir = f"triton_run_langchain_tmp/exe_{safe_name}"
+        tmp_dir = f"OUTPUT_PATH/tmp_{safe_name}"
+        exe_dir = f"OUTPUT_PATH/exe_{safe_name}"
         
         pass_call, pass_exe, c_out, c_err, e_out, e_err = dataset.test_opt_correctness(
             code, 
@@ -292,7 +293,7 @@ if __name__ == "__main__":
 
     start_idx = 0
     length = -1
-    epoch = 5
+    epoch = 10
     max_workers = 64 # 【关键】设置多线程并发数
 
     for iter_num in range(epoch):
@@ -330,10 +331,23 @@ if __name__ == "__main__":
         global_manager.save_to_disk()
         
         # 保存结果日志
-        with open(f"triton_run_langchain_tmp/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
+        with open(f"OUTPUT_PATH/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
             json.dump(epoch_results, f, ensure_ascii=False, indent=4)
         
         # 统计正确率
         if epoch_results:
             acc = sum(1 for item in epoch_results if item.get("pass_exe")) / len(epoch_results)
             print(f"\n🏆 Epoch {iter_num} - Accuracy: {acc:.4f} \n")
+
+    # get accumulated accuracy
+    flag = [0] * 184
+    for iter in range(epoch):
+        root = "OUTPUT_PATH/results_iter"
+        with open(f"{root}_{iter}.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for idx, item in enumerate(data):
+            if item['pass_exe']:
+                flag[idx] = 1
+        acc = sum(flag) / 184
+        print(f"Epoch {iter}, accumulated acc = {acc}")
+

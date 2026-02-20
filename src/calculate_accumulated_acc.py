@@ -37,6 +37,8 @@ if __name__ == "__main__":
     # root = '../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_mem'
     root = '../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_all_mem'
 
+    root = "triton_run_langchain_tmp/results_iter"
+
     flag_pass_exe = [0] * 184   # total 184 samples
     flag_pass_call = [0] * 184
     solutions = [None] * 184
