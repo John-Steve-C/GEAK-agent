@@ -17,9 +17,9 @@ from dataloaders.TritonBench import TritonBench
 from utils.utils import extract_function_signatures, clear_code, clear_json
 
 # --- 1. 线程安全的全局内存知识库 ---
-CHEATSHEET_PATH = "tmp_cheatsheet.json"
 DEFAULT_PATH = "new_first_cheatsheet.json"
-OUTPUT_PATH = "triton_run_langchain_tmp"
+OUTPUT_DIR = "../outputs/triton_langchain_cheatsheet"
+CHEATSHEET_PATH = f"{OUTPUT_DIR}/cheatsheet"
 
 class ThreadSafeCheatsheetManager:
     """包装原始的 CheatsheetManager，添加线程锁以支持并发操作"""
@@ -28,8 +28,8 @@ class ThreadSafeCheatsheetManager:
         self.save_path = tmp_path
         
         # 仅在初始化时读一次文件
-        load_path = tmp_path if os.path.exists(tmp_path) else default_path
-        with open(load_path, "r", encoding="utf-8") as f:
+        # load_path = tmp_path if os.path.exists(tmp_path) else default_path
+        with open(default_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self.manager = CheatsheetManager(initial_state=data)
 
@@ -53,10 +53,10 @@ class ThreadSafeCheatsheetManager:
         with self.lock:
             self.manager.prune_by_utility(min_usage_ratio=min_usage_ratio)
 
-    def save_to_disk(self):
+    def save_to_disk(self, iter):
         """仅在 Epoch 结束或需要持久化时调用"""
         with self.lock:
-            with open(self.save_path, "w", encoding="utf-8") as f:
+            with open(f"{self.save_path}_{iter}.json", "w", encoding="utf-8") as f:
                 f.write(self.manager.to_json())
 
 # 初始化全局单例管理器
@@ -68,8 +68,8 @@ def run_test_outside(dataset, code: str, filename: str) -> str:
     try:
         # 【关键修改】基于 filename 生成独立的编译目录，避免多线程冲突
         safe_name = filename.replace(".py", "")
-        tmp_dir = f"OUTPUT_PATH/tmp_{safe_name}"
-        exe_dir = f"OUTPUT_PATH/exe_{safe_name}"
+        tmp_dir = f"{OUTPUT_DIR}/tmp/{safe_name}"
+        exe_dir = f"{OUTPUT_DIR}/exe/{safe_name}"
         
         pass_call, pass_exe, c_out, c_err, e_out, e_err = dataset.test_opt_correctness(
             code, 
@@ -124,6 +124,7 @@ def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
         return safe_manager.to_string_for_prompt(top_k_hot=top_k)
 
     return [run_test_and_get_perf, curate_cheatsheet, read_cheatsheet]
+    # return [run_test_and_get_perf]
 
 # --- 3. 核心 Workflow 类 ---
 
@@ -215,6 +216,8 @@ Before completing, verify:
             "pass_call": False,
             "call_error": None,
             "exec_error": None,
+            "token_usage": 0,
+            "money_cost": None,
         }
 
         with get_openai_callback() as cb:
@@ -271,6 +274,8 @@ Before completing, verify:
                 result_dict["call_error"] = f"Agent 运行异常: {outer_e}"
                 
             print(f"📊 [{filename}] Token: {cb.total_tokens} | 成本: ${cb.total_cost:.4f}")
+            result_dict["token_usage"] = cb.total_tokens
+            result_dict["money_cost"] = cb.total_cost
             
         return result_dict
 
@@ -292,10 +297,12 @@ if __name__ == "__main__":
     )
 
     start_idx = 0
-    length = -1
+    length = -1      # -1 means for all
     epoch = 10
     max_workers = 64 # 【关键】设置多线程并发数
 
+    # Move accumulated accuracy calculation into the main epoch loop
+    flag = [0] * (length if (length > 0) else 184)
     for iter_num in range(epoch):
         tasks = dataset.problem_states[start_idx : start_idx + length if length > 0 else None]
         epoch_results = []
@@ -326,28 +333,23 @@ if __name__ == "__main__":
 
         # Epoch 结束后的清理和保存操作
         global_manager.prune_by_utility(min_usage_ratio=0.5)
-        
-        # 【统一写盘】
-        global_manager.save_to_disk()
+        global_manager.save_to_disk(iter_num)
         
         # 保存结果日志
-        with open(f"OUTPUT_PATH/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
+        with open(f"{OUTPUT_DIR}/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
             json.dump(epoch_results, f, ensure_ascii=False, indent=4)
         
         # 统计正确率
         if epoch_results:
             acc = sum(1 for item in epoch_results if item.get("pass_exe")) / len(epoch_results)
             print(f"\n🏆 Epoch {iter_num} - Accuracy: {acc:.4f} \n")
-
-    # get accumulated accuracy
-    flag = [0] * 184
-    for iter in range(epoch):
-        root = "OUTPUT_PATH/results_iter"
-        with open(f"{root}_{iter}.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        for idx, item in enumerate(data):
-            if item['pass_exe']:
+        
+        # 累计正确率统计
+        for idx, item in enumerate(epoch_results):
+            if item.get('pass_exe'):
                 flag[idx] = 1
-        acc = sum(flag) / 184
-        print(f"Epoch {iter}, accumulated acc = {acc}")
-
+        accumulated_acc = sum(flag) / len(epoch_results)    # total number is 184
+        print(f"Epoch {iter_num}, accumulated acc = {accumulated_acc}")
+        # save result to the file
+        with open(f"{OUTPUT_DIR}/accumulated_acc.txt", "a", encoding="utf-8") as f:
+            print(f"Epoch {iter_num}, accumulated acc = {accumulated_acc}", file=f)
