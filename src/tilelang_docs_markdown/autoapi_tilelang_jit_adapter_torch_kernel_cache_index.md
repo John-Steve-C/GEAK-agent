@@ -1,0 +1,17 @@
+# tilelang.jit.adapter.torch.kernel_cacheÂ¶
+
+## ClassesÂ¶
+
+`TorchKernelCache` | Caches compiled kernels using a class and database persistence to avoid redundant compilation.  
+---|---  
+  
+## Module ContentsÂ¶
+
+_class _tilelang.jit.adapter.torch.kernel_cache.TorchKernelCacheÂ¶
+    
+
+Bases: [`tilelang.cache.kernel_cache.KernelCache`](../../../../cache/kernel_cache/index.html#tilelang.cache.kernel_cache.KernelCache "tilelang.cache.kernel_cache.KernelCache")
+
+Caches compiled kernels using a class and database persistence to avoid redundant compilation. Cache files:
+
+> kernel.cu: The compiled kernel source code wrapped_kernel.cu: The compiled wrapped kernel source code kernel_lib.so: The compiled kernel library params.pkl: The compiled kernel parameters

@@ -1,0 +1,187 @@
+{
+    "meta_reasoning": [
+        {
+            "id": "7c23da41",
+            "content": "When approaching high-performance kernel development in TileLang, structure your learning and design by first mastering language basics and control flow constructs, then progressing through instructions, autotuning, and type systems. Emphasize understanding data movement across memory scopes and pipeline computation explicitly, and consider kernel parametrization and autotuning as foundational to flexible and efficient GPU/CPU kernel design. Treat the learning process as layered, building from simple DSL constructs towards complex optimizations for maintainability and performance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        }
+    ],
+    "solutions_and_patterns": [
+        {
+            "id": "e2c87c7d",
+            "content": "Symbolic dimension handling in TileLang supports two complementary approaches: type-level annotations for defining named symbolic shapes that bind transparently from tensor arguments, and term-level symbolic variables for explicit use inside kernel bodies. Prefer type-level annotations in signatures to improve clarity and reuse, and term-level symbolic vars when direct iteration or manipulation inside the kernel is required.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "dcc9d203",
+            "content": "Kernel launch configuration in TileLang segregates grid and thread-level parallelism. Use T.Kernel with grid dimensions and thread count to define the execution context, and express per-thread logic using structured loops such as serial, parallel, unroll, or pipelined. This separation enables flexible mapping of computation to hardware threading hierarchies.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "701f2c0b",
+            "content": "Memory management in TileLang leverages explicit scope allocation and copy operations. Allocate buffers in appropriate scopes (global, shared, fragment) according to intended storage lifetime and visibility. Use T.copy to move data between scopes, which performs hardware-specific optimizations transparently. For asynchronous prefetch with manual pipelining, use dedicated async copy primitives with explicit synchronization.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "77ed18d5",
+            "content": "Loops and control flow are expressed with high-level constructs mapping to hardware execution: serial loops for straightforward iteration, unrolled loops for compile-time expansion of iterations, parallel loops for nested parallelism across threads, and pipelined loops to overlap computation stages. Guard loops and memory accesses with predicates to handle boundary conditions and ensure safety on irregular data shapes.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "93074ba7",
+            "content": "Use TileLang's JIT compilation model to parametrize kernels at runtime by passing symbolic dimension sizes and tuning parameters as outer Python arguments, enabling a flexible kernel generation pipeline that compiles once per configuration and runs efficiently on target hardware.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "eec7db7d",
+            "content": "When authoring TileLang kernel code, be aware that while the DSL is embedded in Python, not all Python syntax and idioms are supported inside kernel blocks. Control flow constructs like serial loops, while loops, conditionals, and ternary expressions map to TileLang DSL constructs, but typical Python iteration over lists or functions such as enumerate and zip are unsupported and require explicit index-based looping. Data access supports multi-dimensional indexing and slicing, including negative indices, but Python built-ins like len() or type checks are unavailable within kernels. Functions and classes cannot be defined inside kernels, though reusable code can be created with macro annotations that inline at compile time. This Python compatibility guidance helps bridge the gap between Python and TileLang DSL semantics for more effective kernel programming.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "47bb5102",
+            "content": "TileLang supports a broad type system encompassing standard scalars (booleans, signed/unsigned integers, floating-point), specialized low-precision floats (float8, float6, float4 families), and vectorized SIMD packs with various lane counts. When authoring kernels, specify dtypes flexibly using strings, TileLang dtype objects, or interoperable framework types to improve code clarity and integration. Consider hardware and backend support when using low-precision types and explicitly select accumulation dtypes for mixed-precision computations to ensure numerical correctness and performance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "7b028960",
+            "content": "TileLang features a built-in autotuner to systematically explore kernel configuration spaces, generate and compile candidate kernels in parallel, validate correctness against reference computations, benchmark performance, and cache the best artifacts for efficient reuse. It supports two main workflows: decorator-based autotuning embedding search spaces into kernel signatures, and programmatic autotuning offering fine control over configurations, inputs, and compilation targets. Input tensor supply can be managed via context managers to fix data across configs, custom generator programs for dynamic shapes, or built-in tensor value generators for static shapes. Correctness validation includes customizable reference or manual checks with configurable tolerances, and optional skipping for speed. Autotuning best practices emphasize starting from baseline kernels, respecting hardware constraints to prune impossible configs, and tuning key parameters such as tile sizes, software pipeline stages, and thread counts. Parallel compilation exploits multi-threading while managing device contexts to avoid conflicts, and timeouts prevent stalls. Results and compiled kernels are cached both in-memory and on disk keyed by source and configuration metadata, facilitating reproducibility at runtime and across sessions. Advanced features include deriving configuration spaces programmatically from problem sizes and explicit control over device targets and backends. For manual workflows, batch compilation and external benchmarking can be orchestrated. Finally, autotuning outcomes can be saved and reloaded for integration into multi-host or continuous tuning pipelines, enhancing production readiness and workflow automation.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3056ba17",
+            "content": "Optimize reduction kernels like GEMV in TileLang by exploiting multi-dimensional thread-level parallelism, including splitting the reduction dimension across threads with partial accumulations and using atomic or optimized thread all-reduce primitives to combine results efficiently. Employ vectorized load/store operations aligned with hardware transaction sizes to maximize memory bandwidth utilization, especially for low compute-intensity kernels. Leverage high-level kernel parametrization of threadblock sizes and reduction thread counts to enable autotuner-driven configuration searches for balancing concurrent workload distribution and memory throughput. Use explicit shared memory synchronization and low-level CUDA primitives to optimize producer-consumer patterns within thread blocks, enhancing data locality and minimizing synchronization overhead. This approach applies generally to reduction-heavy kernels where conventional one-thread-one-output strategies underutilize GPU resources.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "b1e91e36",
+            "content": "Multi-level abstraction in GPU DSLs enables progressive control over kernel complexity: a high-level compute-only mode requires no hardware knowledge and focuses on auto-scheduling; an intermediate level exposes architectural constructs like shared memory, thread blocks, and software pipelining to balance expressiveness and portability; and a low-level mode offers explicit thread control and inline assembly for maximal performance tuning. Leveraging this layered design, users can write kernels with modular constructs such as explicit shared memory allocation, register fragments for accumulation, pipelined loops that overlap memory and computation stages, and parallelized data copy loops mapped to thread-level parallelism. Tile-level high-performance primitives (e.g., GEMM intrinsics) integrated into such intermediate abstractions simplify mapping to hardware backends. This approach facilitates flexible kernel parametrization, enables partial lowering to lower layers, and supports autotuning while preserving maintainability and performance portability.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "951cd0f8",
+            "content": "Expressing software pipelines with explicit pipeline stages in intermediate-level GPU DSLs orchestrates asynchronous data movement and compute phases to achieve overlap, improving hardware utilization. Using constructs like Pipelined loops with configurable depth abstracts hardware-specific synchronization, enabling efficient multi-stage prefetch and compute of tiled data along major problem dimensions. Coupling such pipelines with parallel loops for thread-level parallel copy into shared memory before computation maximizes data reuse and bandwidth. This pattern balances compiler automation and user guidance, facilitating tuning of pipeline depth and tile sizes for diverse hardware architectures.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "4f66e547",
+            "content": "Utilizing tile-level GEMM intrinsics in DSLs abstracts the complexity of optimized matrix multiplication leveraging hardware features such as MMA/WMMAs and vendor libraries (e.g., CUTLASS). Integrating these intrinsics within tiled pipelines and ephemeral register fragments supports efficient accumulation and fine-grained control at the tile granularity. This design centralizes performance-critical computation in a composable primitive, enabling backend-specific optimizations while maintaining a high-level, portable kernel structure.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "6469914e",
+            "content": "Layout inference in TileLang automates the deduction of intermediate buffer shapes and layouts based on composite Tile-Operators and scheduling policies, facilitating optimal memory tiling and data partitioning without manual intervention. This capability enables seamless coordination of chained matrix operations and buffer copies by propagating layout constraints, improving kernel modularity and maintaining correctness.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "306e13a8",
+            "content": "Threadblock swizzling is an optimization that remaps the execution order of GPU threadblocks to improve data locality and increase L2 cache hit rates. By adjusting scheduling order with mathematical patterns like diagonal or interleaved mappings, adjacent threadblocks access spatially proximate or overlapping data, reducing cache misses and enhancing overall GPU throughput. Swizzling can be controlled with simple parameters for panel size and ordering direction.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "09f86e57",
+            "content": "Shared memory swizzling remaps buffer address layouts to reduce memory bank conflicts on GPU shared memory. By applying bitwise transformations (e.g., XOR) or other address permutations, it better distributes concurrent thread accesses across memory banks, preventing serialized conflicts and improving parallel load/store throughput. This technique is essential for memory-bound kernels like matrix multiplication and convolution, and can be integrated via specialized layout annotations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "8a0799f4",
+            "content": "Warp specialization partitions GPU warps or warpgroups into producer and consumer roles to optimize pipelined data movement and computation. On architectures like NVIDIA Hopper, a dedicated warpgroup handles asynchronous data transfer while others focus on computation, synchronized via hardware primitives. TileLang abstracts these complexities, automatically transforming kernels into warp-specialized forms and managing synchronization, simplifying user code while preserving high efficiency.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "66dd81a4",
+            "content": "Pipeline annotation in TileLang enables explicit multi-stage software pipelining of kernel loops, overlapping memory access with computation to improve hardware utilization. Users can configure pipeline ranges and stages to tune resource usage and shared memory consumption, balancing concurrency and memory footprint. This fine-grained control helps optimize performance on memory-intensive operators across diverse hardware platforms.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "e9a403df",
+            "content": "When working with very large output tensor dimensions that exceed per-thread register capacity, partition output buffers along less constrained dimensions (e.g., columns) and distribute computation across multiple warpgroups. To reconcile dependencies, partial results can be computed separately and then merged via shared memory or inter-warp communication. This dimension-wise parallelization approach avoids register spilling and improves thread utilization.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "22d36b64",
+            "content": "Cross-architecture kernel optimization involves adapting schedules and resource allocations based on hardware-specific characteristics. For example, AMD MI300X architecture differs from NVIDIA Hopper in shared memory capacity, instruction set (eliminating explicit TMA and warp specialization needs), memory bank conflict rules, and tile size constraints. Strategies include reducing software pipeline depth, switching from shared memory to register fragments for caching, flexible tile dimension choices, and architecture-aware swizzling. TileLang facilitates these adaptations while maintaining common codebases.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        }
+    ],
+    "failed_attempts": []
+}

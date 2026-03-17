@@ -1,0 +1,39 @@
+# tilelang.contrib.cutedsl.warpÂ¶
+
+Warp-level primitives for CuTeDSL backend. Re-exports from cutlass.cute.arch with TileLang naming conventions.
+
+## FunctionsÂ¶
+
+`warp_reduce_sum`(value) | Warp-level parallel reduction: sum across all 32 lanes.  
+---|---  
+`warp_reduce_max`(value) | Warp-level parallel reduction: max across all 32 lanes.  
+`warp_reduce_min`(value) | Warp-level parallel reduction: min across all 32 lanes.  
+`warp_reduce_bitand`(value) | Warp-level parallel reduction: bitwise AND across all 32 lanes.  
+`warp_reduce_bitor`(value) | Warp-level parallel reduction: bitwise OR across all 32 lanes.  
+  
+## Module ContentsÂ¶
+
+tilelang.contrib.cutedsl.warp.warp_reduce_sum(_value_)Â¶
+    
+
+Warp-level parallel reduction: sum across all 32 lanes.
+
+tilelang.contrib.cutedsl.warp.warp_reduce_max(_value_)Â¶
+    
+
+Warp-level parallel reduction: max across all 32 lanes.
+
+tilelang.contrib.cutedsl.warp.warp_reduce_min(_value_)Â¶
+    
+
+Warp-level parallel reduction: min across all 32 lanes.
+
+tilelang.contrib.cutedsl.warp.warp_reduce_bitand(_value_)Â¶
+    
+
+Warp-level parallel reduction: bitwise AND across all 32 lanes.
+
+tilelang.contrib.cutedsl.warp.warp_reduce_bitor(_value_)Â¶
+    
+
+Warp-level parallel reduction: bitwise OR across all 32 lanes.

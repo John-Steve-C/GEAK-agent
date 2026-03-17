@@ -2,7 +2,7 @@ import re
 import json
 import ast
 
-def extract_function_signatures(code):
+def extract_function_signatures(code, mode='triton'):
     function_defs = []
     pattern = r'def\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)'
     matches = re.finditer(pattern, code)
@@ -10,8 +10,15 @@ def extract_function_signatures(code):
     for match in matches:
         func_name = match.group(1)
         params = match.group(2)
+        
+        if mode == 'tilelang':
+            # TileLang does not support tl.constexpr annotations in function signatures.
+            params = re.sub(r":\s*tl\.constexpr\b", "", params)
+            params = re.sub(r"\s+,", ",", params)
+        
         function_defs.append(f"def {func_name}({params})")
     
+    # print("Extracted function signatures:", function_defs)
     return function_defs
 
 def clear_code(code):
