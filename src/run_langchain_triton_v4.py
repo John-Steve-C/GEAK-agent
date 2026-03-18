@@ -17,8 +17,10 @@ from dataloaders.TritonBench import TritonBench
 from utils.utils import extract_function_signatures, clear_code, clear_json
 
 # --- 1. 线程安全的全局内存知识库 ---
-DEFAULT_PATH = "new_first_cheatsheet.json"
-OUTPUT_DIR = "../outputs/triton_langchain_cheatsheet"
+# DEFAULT_PATH = "new_first_cheatsheet.json"
+# OUTPUT_DIR = "../outputs/triton_langchain_true_cheatsheet"
+DEFAULT_PATH = "triton_delta_cheatsheet.json"
+OUTPUT_DIR = "../outputs/triton_langchain_delta_cheatsheet"
 CHEATSHEET_PATH = f"{OUTPUT_DIR}/cheatsheet"
 
 class ThreadSafeCheatsheetManager:
@@ -44,6 +46,30 @@ class ThreadSafeCheatsheetManager:
     def to_string_for_prompt(self, top_k_hot: int):
         with self.lock:
             return self.manager.to_string_for_prompt(top_k_hot=top_k_hot)
+
+    def build_prompt(self, question: str, model_answer: str, model_reflection: str):
+        with self.lock:
+            return self.manager.build_prompt(
+                question=question,
+                model_answer=model_answer,
+                model_reflection=model_reflection
+            )
+
+    def build_prompt_no_qa(self, raw_prompt: str):
+        with self.lock:
+            return self.manager.build_prompt_no_qa(raw_prompt=raw_prompt)
+
+    def build_prompt_delta(self, question: str, model_answer: str, model_reflection: str):
+        with self.lock:
+            return self.manager.build_prompt_delta(
+                question=question,
+                model_answer=model_answer,
+                model_reflection=model_reflection
+            )
+    
+    def build_prompt_delta_no_qa(self, raw_prompt: str):
+        with self.lock:
+            return self.manager.build_prompt_delta_no_qa(raw_prompt=raw_prompt)
 
     def record_usage(self, model_thought, current_iter):
         with self.lock:
@@ -95,8 +121,9 @@ def run_test_outside(dataset, code: str, filename: str) -> str:
 
 # --- 2. 封装 Tools ---
 
-def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
+def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager, curation_model_name: str):
     """注入 dataset 和 线程安全的 manager"""
+    curation_llm = ChatOpenAI(model=curation_model_name, temperature=0)
     
     @tool
     def run_test_and_get_perf(code: str, filename: str) -> str:
@@ -112,11 +139,29 @@ def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
         return json.dumps(result)
 
     @tool
-    def curate_cheatsheet(ops_json: str):
-        """[CURATION] 将当前发现的优化策略或失败模式沉淀到知识库。"""
-        # 直接使用内存里的 manager，有锁保护，无需读写文件
-        safe_manager.apply_operations(ops_json)
-        return f"知识库已更新：{safe_manager.get_stats()}"
+    def curate_cheatsheet(curation_context: str):
+        """[CURATION] 基于模型答案生成更新操作并写入知识库。"""
+        try:
+            parsed = json.loads(curation_context)
+            question = parsed.get("question", "")
+            model_answer = parsed.get("model_answer", "")
+            model_reflection = parsed.get("model_reflection", "")
+            prompt = safe_manager.build_prompt_delta(
+                question=question,
+                model_answer=model_answer,
+                model_reflection=model_reflection
+            )
+        except Exception:
+            # Fallback: treat input as a raw prompt (no Q&A structure)
+            prompt = safe_manager.build_prompt_delta_no_qa(raw_prompt=curation_context)
+
+        try:
+            llm_response = curation_llm.invoke(prompt)
+            response_text = llm_response.content if hasattr(llm_response, "content") else str(llm_response)
+            safe_manager.apply_operations(response_text)
+            return f"知识库已更新：{safe_manager.get_stats()}"
+        except Exception as e:
+            return f"⚠️ 知识库更新失败: {e}"
 
     @tool
     def read_cheatsheet(top_k: int = 20):
@@ -129,11 +174,11 @@ def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
 # --- 3. 核心 Workflow 类 ---
 
 class TritonLangChainWorkflow:
-    def __init__(self, dataset, manager, model_name="gpt-4.1-nano"):
+    def __init__(self, dataset, manager, model_name="gpt-4.1-nano", curation_model_name="gpt-4.1-mini"):
         self.dataset = dataset
         self.manager = manager
         self.llm = ChatOpenAI(model=model_name, temperature=1.0)
-        self.tools = create_triton_tools(dataset, manager)
+        self.tools = create_triton_tools(dataset, manager, curation_model_name)
         
         self.system_prompt = """You are an expert Python programmer specializing in NVIDIA Triton kernels, specifically targeting **AMD GPUs using the ROCm environment**.
 Your task is to generate a Python code snippet containing a Triton kernel based on the following request:
@@ -145,20 +190,11 @@ You are an autonomous agent. You must not just guess the answer, but actively us
 1. **Research:** Use `read_cheatsheet` to check for past experiences or patterns related to this task. And there is a parameter `top_k` you can set to choose how many most-related items you want to see.
 2. **Draft & Test:** Write the initial kernel and IMMEDIATELY use `run_test_and_get_perf` to test its correctness. 
 3. **Reflect & Fix:** If the test fails (`pass_exe` is False), analyze the `exec_error`, modify your code, and test again. Repeat this until it passes.
-4. **Curate:** Once the code passes, use `curate_cheatsheet` to save generalized insights (successful patterns or failure reasons). Provide a strict JSON string mapping your updates:
-
-```json
-{
-  "reasoning": "Briefly explain what you learned from this task.",
-  "operations": [
-    // Use one or more of these operation objects as needed:
-    { "type": "ADD", "section": "<meta_reasoning | solutions_and_patterns | failed_attempts>", "content": "<High-level new insight>" },
-    { "type": "UPDATE", "target_id": "<ID>", "content": "<Refined description for existing memory>" },
-    { "type": "VARIATION", "target_id": "<ID>", "name": "<Variant name>", "content": "<Alternative approach>" },
-    { "type": "EXPAND", "target_id": "<ID>", "content": "<New edge case or consideration>" }
-  ]
-}
-```
+4. **Curate:** Once the code passes, call `curate_cheatsheet` with a JSON string containing:
+   - `question`: the original instruction
+   - `model_answer`: your final JSON output (the one containing `thought` and `code`)
+   - `model_reflection`: brief reflection on failures/successes (can be empty string)
+   The tool will build the curation prompt and call a separate LLM to generate operations, then apply them to the cheatsheet.
 
 5. **Final Verification:**
 Before completing, verify:

@@ -420,6 +420,236 @@ RESPONSE FORMAT (JSON ONLY):
             model_answer=model_answer,
             model_reflection=model_reflection
         )
+
+    def build_prompt_delta(self, question: str, model_answer: str, model_reflection: str) -> str:
+        template = """
+You are a curator of high-value technical deltas for LLM improvement.
+
+Your goal is NOT to summarize or generalize broadly.
+Your goal is to extract the **minimal causal insight** that explains:
+
+→ Why the previous attempt failed
+→ Why the current attempt succeeded
+→ What NEW capability or realization enabled the improvement
+
+----------------------------------------
+
+**CRITICAL PRINCIPLE: DELTA, NOT SUMMARY**
+
+Only extract insights that satisfy ALL of:
+1. Contrastive: distinguishes failure vs success
+2. Causal: explains *why* the change mattered
+3. Novel: not already obvious or present in cheatsheet
+4. Transferable: reusable in future similar problems
+
+If an insight is generic, obvious, or non-causal → DISCARD it.
+
+----------------------------------------
+
+**Context:**
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+Previous Cheatsheet:
+{previous_cheatsheet}
+
+Current Question:
+{question}
+
+Model Answer:
+{model_answer}
+
+Model Reflection (contains failure→success reasoning):
+{model_reflection}
+
+----------------------------------------
+
+**Extraction Procedure (Follow Strictly):**
+
+Step 1 — Identify Failure Mode
+- What specifically went wrong before?
+- Be precise (e.g., "incorrect abstraction boundary", "missing constraint", "wrong API assumption")
+
+Step 2 — Identify Fix / Change
+- What changed in the successful attempt?
+- Focus on *decision*, not outcome
+
+Step 3 — Derive Causal Insight
+- Why did this change fix the failure?
+- What principle does this reveal?
+
+Step 4 — Novelty Filter
+Reject the insight if:
+- It is generic (e.g., "be careful", "check assumptions")
+- It already exists in cheatsheet (unless refined)
+- It is just restating the solution
+
+Step 5 — Compress into ONE atomic insight
+- Must be sharp, specific, and mechanism-level
+- Prefer “if X fails due to Y → apply Z” structure
+
+----------------------------------------
+
+**Allowed Output Types:**
+
+1. ADD → new delta insight
+2. UPDATE → sharpen an existing vague item into causal form
+3. VARIATION → same pattern under different failure mode
+4. EXPAND → add a new failure mode or boundary condition
+
+----------------------------------------
+
+**Insight Writing Rules:**
+
+Good insight examples:
+- "When code generation fails due to incorrect indentation inside nested decorators, enforce structure by explicitly separating decorator and function scopes before emitting code."
+- "If a model hallucinates API behavior, constrain generation by first forcing explicit API contract reconstruction."
+
+Bad insight examples:
+- "Be careful with indentation"
+- "Understand the API better"
+- "Write clean code"
+
+----------------------------------------
+
+**Output Format (STRICT JSON ONLY):**
+
+{{
+  "reasoning": "Explain briefly what the failure→success delta is and why it is worth storing",
+  "operations": [
+    {{
+      "type": "ADD",
+      "section": "meta_reasoning | solutions_and_patterns | failed_attempts",
+      "content": "Atomic causal delta insight in 'failure → fix → why' form"
+    }}
+  ]
+}}
+
+If NO high-quality delta insight exists, return:
+{{
+  "reasoning": "No non-trivial causal delta found",
+  "operations": []
+}}
+"""
+        return template.format(
+            cheatsheet_stats=self.get_stats(),
+            previous_cheatsheet=self.to_string_for_prompt(),    # use full cheatsheet when updating dc itself
+            question=question,
+            model_answer=model_answer,
+            model_reflection=model_reflection
+        )
+
+    def build_prompt_delta_no_qa(self, raw_prompt) -> str:
+        template = """
+You are a curator of high-value technical deltas for LLM improvement.
+
+Your goal is NOT to summarize or generalize broadly.
+Your goal is to extract the **minimal causal insight** that explains:
+
+→ Why the previous attempt failed
+→ Why the current attempt succeeded
+→ What NEW capability or realization enabled the improvement
+
+----------------------------------------
+
+**CRITICAL PRINCIPLE: DELTA, NOT SUMMARY**
+
+Only extract insights that satisfy ALL of:
+1. Contrastive: distinguishes failure vs success
+2. Causal: explains *why* the change mattered
+3. Novel: not already obvious or present in cheatsheet
+4. Transferable: reusable in future similar problems
+
+If an insight is generic, obvious, or non-causal → DISCARD it.
+
+----------------------------------------
+
+**Context:**
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+Previous Cheatsheet:
+{previous_cheatsheet}
+
+Current Context:
+{raw_prompt}
+
+----------------------------------------
+
+**Extraction Procedure (Follow Strictly):**
+
+Step 1 — Identify Failure Mode
+- What specifically went wrong before?
+- Be precise (e.g., "incorrect abstraction boundary", "missing constraint", "wrong API assumption")
+
+Step 2 — Identify Fix / Change
+- What changed in the successful attempt?
+- Focus on *decision*, not outcome
+
+Step 3 — Derive Causal Insight
+- Why did this change fix the failure?
+- What principle does this reveal?
+
+Step 4 — Novelty Filter
+Reject the insight if:
+- It is generic (e.g., "be careful", "check assumptions")
+- It already exists in cheatsheet (unless refined)
+- It is just restating the solution
+
+Step 5 — Compress into ONE atomic insight
+- Must be sharp, specific, and mechanism-level
+- Prefer “if X fails due to Y → apply Z” structure
+
+----------------------------------------
+
+**Allowed Output Types:**
+
+1. ADD → new delta insight
+2. UPDATE → sharpen an existing vague item into causal form
+3. VARIATION → same pattern under different failure mode
+4. EXPAND → add a new failure mode or boundary condition
+
+----------------------------------------
+
+**Insight Writing Rules:**
+
+Good insight examples:
+- "When code generation fails due to incorrect indentation inside nested decorators, enforce structure by explicitly separating decorator and function scopes before emitting code."
+- "If a model hallucinates API behavior, constrain generation by first forcing explicit API contract reconstruction."
+
+Bad insight examples:
+- "Be careful with indentation"
+- "Understand the API better"
+- "Write clean code"
+
+----------------------------------------
+
+**Output Format (STRICT JSON ONLY):**
+
+{{
+  "reasoning": "Explain briefly what the failure→success delta is and why it is worth storing",
+  "operations": [
+    {{
+      "type": "ADD",
+      "section": "meta_reasoning | solutions_and_patterns | failed_attempts",
+      "content": "Atomic causal delta insight in 'failure → fix → why' form"
+    }}
+  ]
+}}
+
+If NO high-quality delta insight exists, return:
+{{
+  "reasoning": "No non-trivial causal delta found",
+  "operations": []
+}}
+"""
+        return template.format(
+            cheatsheet_stats=self.get_stats(),
+            previous_cheatsheet=self.to_string_for_prompt(),    # use full cheatsheet when updating dc itself
+            raw_prompt=raw_prompt
+        )
     
     def prune_length(self, max_length: int = 1000000, max_items: int = 100):
         """Prunes the cheatsheet to keep only the most recent items up to max_items."""
