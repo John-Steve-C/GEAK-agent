@@ -7,7 +7,10 @@ from tqdm import tqdm
 import signal
 from multiprocessing import Pool, Lock, Value
 from dataloaders.ProblemState import ProblemState
-from dataloaders.TB_eval.utils import code_call_exec_success_allclose
+from dataloaders.TB_eval.utils import (
+    code_call_exec_success_allclose,
+    code_call_exec_success_allclose_tilelang,
+)
 
 
 
@@ -463,12 +466,30 @@ class TritonBench:
         #     print(f"生成棒棒棒！！！: {efficiency} > {efficiency1}")
         return spdup, efficiency, round(sum(ms_gen)/len(ms_gen), 4)
     
-    def test_opt_correctness(self, code, filename, tmp_dir, save_scripts=True, exe_dir="pass_exe"):
+    def test_opt_correctness(
+        self,
+        code,
+        filename,
+        tmp_dir,
+        save_scripts=True,
+        exe_dir="pass_exe",
+        backend="triton",
+    ):
         """
         Runs a given Python script on a specified GPU.
         """
         os.makedirs(exe_dir, exist_ok=True)
-        call_status, exec_status, call_stdout, call_stderr, exe_stdout, exe_stderr = code_call_exec_success_allclose(code=code, fname=filename, temp_root=tmp_dir, py_folder=self.py_folder)
+        if backend == "triton":
+            checker = code_call_exec_success_allclose
+        elif backend == "tilelang":
+            checker = code_call_exec_success_allclose_tilelang
+        else:
+            raise ValueError(f"Unsupported backend: {backend}")
+
+        call_status, exec_status, call_stdout, call_stderr, exe_stdout, exe_stderr = checker(
+            code=code, fname=filename, temp_root=tmp_dir, py_folder=self.py_folder,
+            verbose=True,
+        )
         pass_call = False
         pass_exe = False
         if "True" in str(call_status):

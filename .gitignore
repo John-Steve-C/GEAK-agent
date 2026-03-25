@@ -9,6 +9,7 @@ src/tmp_*
 src/tmp_output_for_code_retrieve.json
 
 src/triton_example_codes
+src/triton_run_langchain_tmp
 
 outputs/
 inject_api_key.sh

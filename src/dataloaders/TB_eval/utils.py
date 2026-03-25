@@ -219,7 +219,7 @@ def code_call_exec_success_allclose(code, fname, py_folder, temp_root="tmp2", at
         call_status = result_call.returncode == 0
 
         # Check for correctness
-        result_corr = subprocess.run([f'python3 dataloaders/TB_eval/correctness.py --gen_file {gen_file} --ref_file {triton_file} --atol {atol} --rtol {rtol}'], capture_output=True, text=True, timeout=timeout, shell=True)
+        result_corr = subprocess.run([f'python3 /data/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness.py --gen_file {gen_file} --ref_file {triton_file} --atol {atol} --rtol {rtol}'], capture_output=True, text=True, timeout=timeout, shell=True)
         stdout_corr = result_corr.stdout
         stderr_corr = result_corr.stderr
 
@@ -253,7 +253,88 @@ def code_call_exec_success_allclose(code, fname, py_folder, temp_root="tmp2", at
         _, exec_status, gen_stdout, gen_stderr = stdout_corr.split("*#*#")
         return call_status, exec_status, result_call.stdout, result_call.stderr, gen_stdout, gen_stderr
 
-    
+def _is_missing_tilelang_error(stderr: str) -> bool:
+    if not stderr:
+        return False
+    stderr_lower = stderr.lower()
+    return "modulenotfounderror" in stderr_lower and "tilelang" in stderr_lower
+
+
+def code_call_exec_success_allclose_tilelang(code, fname, py_folder, temp_root="tmp2", atol=1e-3, rtol=1e-1, timeout=2*60, verbose=False):
+    tmp_gen_folder = os.path.join(temp_root, "gen")
+    os.makedirs(tmp_gen_folder, exist_ok=True)
+
+    ref_file = os.path.join(py_folder, fname)
+
+    gen_file = get_temp_file(prefix=f'{fname}_gen_tilelang_code')
+    gen_file = os.path.join(tmp_gen_folder, gen_file)
+
+    # print('code: ', code)
+    # print('gen_file: ', gen_file)
+    # print('ref_file: ', ref_file)
+
+    hash_line = "#" * 146
+
+    with open(ref_file, 'r') as f:
+        lines = f.readlines()
+        for iL, line in enumerate(lines):
+            if line.strip() == hash_line:
+                break
+        test_code_lines = lines[iL + 1:]
+
+    code = code + '\n\n' + hash_line + '\n' + '\n' + '\n'.join(test_code_lines)
+
+    with open(gen_file, 'w') as f:
+        f.write(code)
+
+    try:
+        result_call = subprocess.run([f'python3 {gen_file}'], capture_output=True, text=True, timeout=timeout, shell=True)
+        call_status = result_call.returncode == 0
+
+        if (not call_status) and _is_missing_tilelang_error(result_call.stderr):
+            err_msg = "TileLang runtime is unavailable in this environment; skipping TileLang execution."
+            if verbose:
+                print(f"File: {fname}, {err_msg}")
+            return False, None, result_call.stdout, err_msg, None, None
+
+        result_corr = subprocess.run(
+            [f'python3 /data/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness_tilelang.py --gen_file {gen_file} --ref_file {ref_file} --atol {atol} --rtol {rtol}'],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            shell=True
+        )
+        stdout_corr = result_corr.stdout
+        stderr_corr = result_corr.stderr
+
+    except Exception as e:
+        if verbose:
+            print(f"File: {fname}, Execution error: {e}")
+        return None, None, None, str(e), None, None
+
+    except subprocess.TimeoutExpired:
+        if verbose:
+            print(f"File: {fname} timed out!")
+        return None, None, None, "Time out", None, None
+    finally:
+        pass
+
+    with open(gen_file + ".stdout", 'w') as f:
+        f.write(stdout_corr)
+
+    with open(gen_file + ".stderr", 'w') as f:
+        f.write(stderr_corr)
+
+    if result_corr.returncode != 0:
+        if verbose:
+            print(f"Error in generated code: {stderr_corr}")
+        return call_status, None, result_call.stdout, result_call.stderr, stdout_corr, stderr_corr
+
+    if verbose:
+        print(f"Success in generated code: {stdout_corr}")
+    _, exec_status, gen_stdout, gen_stderr = stdout_corr.split("*#*#", 3)
+    return call_status, exec_status, result_call.stdout, result_call.stderr, gen_stdout, gen_stderr
+
 
 class bcolors:
     HEADER = '\033[95m'

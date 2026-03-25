@@ -6,9 +6,14 @@ from bs4 import BeautifulSoup
 import html2text  # 需要安装: pip install html2text
 
 # --- 配置 ---
-BASE_URL = "https://triton-lang.org/main/index.html"
-TARGET_DOMAIN = "triton-lang.org"
-OUTPUT_DIR = "triton_docs_markdown"
+# BASE_URL = "https://triton-lang.org/main/index.html"
+# TARGET_DOMAIN = "triton-lang.org"
+# OUTPUT_DIR = "triton_docs_markdown"
+
+BASE_URL = "https://tilelang.com/index.html"
+TARGET_DOMAIN = "tilelang.com"
+OUTPUT_DIR = "tilelang_docs_markdown"
+
 MAX_PAGES = 200
 
 # 初始化 HTML 转 Markdown 工具

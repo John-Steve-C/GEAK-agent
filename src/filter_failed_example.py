@@ -42,7 +42,7 @@ if __name__ == "__main__":
     # root = "../outputs/split_embed_optimagent_gpt41_mini_mem"
 
     root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
-    root_2 = "../outputs/test/optimagent_gpt41_mini_answer_serial_dc_mem"
+    root_2 = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_mem"
 
     # embed_full = load_json("retrievers/parsed_corpus_embeddings_ordered.json")
     # embed_split = load_json("retrievers/parsed_corpus_embeddings_split_ordered.json")
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             # if idx >= 20:
             #     break
             # filter failed examples
-            if data[key]["pass_exe"] and not data_next[key]["pass_exe"]:
+            if data[key]["pass_exe"] and not data_2[key]["pass_exe"]:
                 failed_examples.append({
                     "file_name": key,
                     "solution": data[key],
@@ -98,11 +98,23 @@ if __name__ == "__main__":
                     "failed_iter": iter + 1
                 })
                 print(key, iter + 1)
-                print(data_2[key]['reflection'])
+                # print(data_2[key]['reflection'])
                 # print("==================================Solution: \n", data[key]["exe_candidate"])
                 # print("==================================Failed response: \n", data_next[key]["exe_candidate"])
-                # if data[key]["oneshot"] == data_next[key]["oneshot"]:
-                #     print("Same oneshot prompt")
+                if data[key]["oneshot"] == data_next[key]["oneshot"]:
+                    print("Same oneshot prompt")
+
+                if key == "square_matrix.py" and iter + 1 == 3:
+                    print("Debug consine_compute.py")
+                    print("Current pass_exe:", data[key]["pass_exe"])
+                    print("Next pass_exe:", data_2[key]["pass_exe"])
+                    print("Current exe_candidate:", data[key]["exe_candidate"])
+                    print("Next exe_candidate:", data_2[key]["exe_candidate"])
+                    if data_2[key]["exe_candidate"] == data[key]["exe_candidate"]:
+                        print("Same exe_candidate")
+                    if data_2[key]["oneshot"] == data[key]["oneshot"]:
+                        print("Same oneshot prompt")
+                    print("==================================")
                 
             # filter passed examples
             # if not data[key]["pass_exe"] and data_next[key]["pass_exe"]:

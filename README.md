@@ -4,8 +4,10 @@ This repo is based on the [GEAK-agent-v1](https://github.com/AMD-AGI/GEAK-agent/
 
 1. add a embedding-based retriever.
 2. add a cheatsheet (with a manager), also initialize it with triton documents.
+
+   The idea of cheatsheet is borrowed from [Dynamic Cheatsheet: Test-Time Learning with Adaptive Memory](https://github.com/suzgunmirac/dynamic-cheatsheet), but the implementation is different (more like [Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models](https://github.com/ace-agent/ace/tree/main), but only borrow the response parsing list structure). We use a utility pruning instead of embedding-similarity merging, and we also introduce variations for a tree-like structure. So it's a more fine-grained control.
 3. add support for open_source models (vllm.py)
-4. add a parallel(pipeline) version for optimAgent (saved in OptimAgent_parallel.py), but performance is not so good as seperated one.
+4. add a parallel(pipeline) version for optimAgent (saved in OptimAgent_parallel.py), but performance is not so good as seperated one. Previous two version of parallel is OptimAgent_withlock/queue.py
 
 ## Technical report [![arXiv](https://img.shields.io/badge/arXiv-2507.23194-b31b1b.svg)](https://arxiv.org/abs/2507.23194)
 
