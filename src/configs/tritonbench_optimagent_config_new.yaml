@@ -1,7 +1,14 @@
 # LLM model
-api_key: ${env:OPENAI_API_KEY}
+# api_key: ${oc.env:OPENAI_API_KEY}   # need hydra support
 # model_id: "dvue-aoai-001-gpt-4.1"
 model_id: "gpt-4.1-mini"
+# model_id: "gemini-2.5-flash"
+
+# model_id: "/shared/models/hf/Meta-Llama-3-8B"
+model_id: "/shared/models/hf/AutoTriton"
+# model_id: "/shared/models/hf/KernelLLM"
+# model_id: "/shared/models/hf/Qwen3-Coder-30B-A3B-Instruct"
+
 temperature: 1.0
 
 
@@ -17,7 +24,7 @@ perf_ref_folder: null
 perf_G_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G"
 py_interpreter: "python"
 result_path: null
-mem_file: null # "../outputs/test/optimagent_gpt41_mini_init_reflect_serial_dc_mem_0.json"
+mem_file: null # "../outputs/full_temp0/core_whole_embed_optimagent_gpt41_mini_mem_0.json"
 start_iter: 0
 datalen: null
 start_idx: 0
@@ -25,13 +32,17 @@ target_kernels: null
 
 # agent
 # output_path: "../outputs/split_embed_optimagent_gpt41_mini.jsonl"
-# output_path: "../outputs/test/true_embed_optimagent_gpt41_mini.jsonl"
-# output_path: "../outputs/compare_split_embed_optimagent_gpt41_mini.jsonl"
-# output_path: "../outputs/test/optimagent_gpt41_mini_init_reflect_serial_dc.jsonl"
-# output_path: "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc.jsonl"
-output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder.jsonl"
+# output_path: "../outputs/test/tmp_cheat_embed_optimagent_gpt41_mini.jsonl"
+# output_path: "../outputs/full_temp0/seperate_cheat_embed_optimagent_gpt41_mini.jsonl"
 
+# output_path: "../outputs/test/combined_cheat_embed_optimagent_gpt41_mini.jsonl"
+# output_path: "../outputs/test/linear_no_code_BM25_optimagent_gpt41_mini.jsonl"
 
+# output_path: "../outputs/test/linear_BM25_optimagent_gemini_25_flash.jsonl"
+
+# output_path: "../outputs/full_temp0/embed_optimagent_gpt41_mini.jsonl"
+# output_path: "../outputs/full_temp0/core_whole_embed_optimagent_gpt41_mini.jsonl"
+output_path: "../outputs/full/BM25_reorder_dc_optimagent_autotriton.jsonl"
 max_iteration: 5
 multi_thread: true
 thread_num: 128

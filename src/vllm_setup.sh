@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=2,3
 
 # reference: 
 # https://docs.vllm.ai/en/latest/serving/distributed_serving.html
@@ -62,9 +62,11 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 # model_path=/shared/models/hf/Llama-2-7b-chat-hf
 
 
-model_path=/shared/models/hf/jina-embeddings-v3
+model_path=/shared/models/hf/AutoTriton
+# model_path=/shared/models/hf/KernelLLM
+# model_path=/shared/models/hf/Qwen3-Coder-30B-A3B-Instruct
 
 echo $model_path
-vllm serve $model_path --dtype auto --api-key token-abc123 --port 8000 --trust-remote-code # --pipeline-parallel-size 4 # --tensor-parallel-size 2
+vllm serve $model_path --dtype auto --api-key token-abc123 --port 8001 --trust-remote-code --tensor-parallel-size 2 # --pipeline-parallel-size 4 
 
 # --max_model_len 22208

@@ -1,5 +1,6 @@
 from agents.OptimAgent import OptimAgent
 from models.OpenAI import OpenAIModel
+from models.vllm import VLLMModel
 from dataloaders.TritonBench import TritonBench
 from args_config import load_config
 
@@ -10,7 +11,8 @@ def main():
 
 
     # setup LLM model
-    model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
+    # model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
+    model = VLLMModel(model_id=args.model_id)
 
     # setup dataset
     dataset = TritonBench(statis_path=args.statis_path, 
