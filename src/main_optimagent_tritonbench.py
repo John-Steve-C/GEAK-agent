@@ -11,8 +11,8 @@ def main():
 
 
     # setup LLM model
-    # model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
-    model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"), model_id=args.model_id)
+    model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
+    # model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"), model_id=args.model_id)
 
     # setup dataset
     dataset = TritonBench(statis_path=args.statis_path, 

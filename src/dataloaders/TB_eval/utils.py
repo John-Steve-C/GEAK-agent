@@ -219,7 +219,7 @@ def code_call_exec_success_allclose(code, fname, py_folder, temp_root="tmp2", at
         call_status = result_call.returncode == 0
 
         # Check for correctness
-        result_corr = subprocess.run([f'python3 /data/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness.py --gen_file {gen_file} --ref_file {triton_file} --atol {atol} --rtol {rtol}'], capture_output=True, text=True, timeout=timeout, shell=True)
+        result_corr = subprocess.run([f'python3 /home/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness.py --gen_file {gen_file} --ref_file {triton_file} --atol {atol} --rtol {rtol}'], capture_output=True, text=True, timeout=timeout, shell=True)
         stdout_corr = result_corr.stdout
         stderr_corr = result_corr.stderr
 
@@ -298,7 +298,7 @@ def code_call_exec_success_allclose_tilelang(code, fname, py_folder, temp_root="
             return False, None, result_call.stdout, err_msg, None, None
 
         result_corr = subprocess.run(
-            [f'python3 /data/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness_tilelang.py --gen_file {gen_file} --ref_file {ref_file} --atol {atol} --rtol {rtol}'],
+            [f'python3 /home/wentao/GEAK-agent/src/dataloaders/TB_eval/correctness_tilelang.py --gen_file {gen_file} --ref_file {ref_file} --atol {atol} --rtol {rtol}'],
             capture_output=True,
             text=True,
             timeout=timeout,

@@ -37,17 +37,19 @@ if __name__ == "__main__":
     model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id="gpt-4.1-mini")
 
     # docs = read_files_from_directory("./triton_example_codes")
+    # docs = read_files_from_directory("./triton_docs_markdown")
+    docs = read_files_with_filter("./triton_docs_markdown", "main_getting-started_tutorials_")
     # docs = read_files_with_filter("./triton_docs_markdown", "main_python-api_")
 
-    doc_1 = read_files_with_filter("./tilelang_docs_markdown", "programming_guides")
-    doc_2 = read_files_with_filter("./tilelang_docs_markdown", "deeplearning_operators")
+    # doc_1 = read_files_with_filter("./tilelang_docs_markdown", "programming_guides")
+    # doc_2 = read_files_with_filter("./tilelang_docs_markdown", "deeplearning_operators")
     
-    docs = doc_1 + doc_2
+    # docs = doc_1 + doc_2
 
     print(len(docs), "documents loaded into cheatsheet.")
 
     for content in docs:
-        prompt = global_cheatsheet.build_prompt_no_qa(raw_prompt=content)
+        prompt = global_cheatsheet.build_prompt_relation_no_qa(raw_prompt=content)
         msg = [
             {"role": "user", "content": prompt},
         ]
@@ -63,7 +65,7 @@ if __name__ == "__main__":
         # print("Cheatsheet updated. Current stats:", global_cheatsheet.get_stats())
 
     # Save the final cheatsheet to a file
-    with open("tilelang_first_cheatsheet.json", "w", encoding="utf-8") as f:
+    with open("cheatsheet_relation.json", "w", encoding="utf-8") as f:
         json.dump(global_cheatsheet.data, f, indent=4)
 
     # with open("/data/wentao/GEAK-agent/outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_cheatsheet_4.json", "r", encoding="utf-8") as f:

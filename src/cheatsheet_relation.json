@@ -1,0 +1,1203 @@
+{
+    "meta_reasoning": [
+        {
+            "id": "dd45ae33",
+            "content": "Partitioning workloads via tl.arange and program_id splits the vector into independent blocks processed in parallel, maximizing hardware utilization while avoiding thread divergence and load imbalance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "0f7065ee",
+            "content": "Masking out-of-bounds memory accesses ensures safe memory operations without undefined behavior, which also enables kernels to handle any input size flexibly even if not divisible by block size.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "c9f80766",
+            "content": "Declaring block sizes and other compile-time parameters as constexpr allows the compiler to optimize memory layouts and generate efficient specialized code.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "51ff99aa",
+            "content": "Benchmarking against native PyTorch operations verifies both functional correctness and performance characteristics, motivating iterative kernel tuning and validation.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "031b84df",
+            "content": "Masking combined with conditional computation prevents invalid memory accesses by safely skipping out-of-range or padded elements, which also optimizes performance by avoiding redundant operations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "5b25958e",
+            "content": "Hierarchical block partitioning allows kernels to map parallel execution threads cleanly onto multi-dimensional data, avoiding divergence and load imbalance that occur if flattening is done naively.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "09e6191a",
+            "content": "Fusing all softmax steps into a single kernel drastically reduces global memory traffic from multiple passes over the data to a single pass, leveraging faster on-chip SRAM and minimizing expensive DRAM accesses; this is why fused kernels achieve significant speedups over na\u00efve multi-kernel approaches.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "ceba6193",
+            "content": "Masking with padding aligned to powers of two permits safe vectorized memory operations in kernels constrained to fixed block sizes, preventing memory out-of-bounds errors while allowing efficient, aligned loads/stores; setting out-of-range elements to -inf ensures max reductions ignore those padded elements correctly.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "e06e89b4",
+            "content": "Dynamic occupancy tuning based on device-specific register and shared memory limits maximizes GPU hardware utilization without register pressure or shared memory contention, enabling higher parallel throughput than static kernel launches.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "615776df",
+            "content": "Fusing scale application into the dot_scaled MMA kernel reduces memory bandwidth and synchronization overhead by applying scales inline during the matrix multiplication. This leverages the hardware's native tensor core scaling capabilities, minimizing intermediate storage and avoiding separate element-wise scaling passes, resulting in improved throughput and accuracy.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "6be83173",
+            "content": "Storing scale factors in a multidimensional packed layout that aligns with the MMA tile size and broadcast vector size enables contiguous vector loads per thread or warp. This memory layout optimization reduces cache misses and global memory transactions, directly improving kernel performance by maximizing memory coalescing and hardware utilization.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "54957361",
+            "content": "For AMD CDNA4 architectures, shuffle of scale tensors reorganizes scales based on warp and thread layouts because MFMA instructions access scales non-contiguously across the K dimension by threads. This transformation consequently enables coalesced scale loads which decrease load latency and increase global memory bandwidth utilization, critical for maximizing MFMA throughput.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "60cf4381",
+            "content": "Storing dropout masks is memory-inefficient and complicates reproducibility during recomputation. Generating dropout keep masks dynamically within kernels using seeded PRNG based on block offsets and seed reduces memory consumption and ensures deterministic masking. Masking load/store accesses based on offsets prevents invalid memory access and ensures correctness regardless of input size.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "ef3c2196",
+                    "justification": "Understanding the efficiency gain explains why generating masks dynamically is preferable."
+                }
+            ]
+        },
+        {
+            "id": "06d43c9f",
+            "content": "Fusing all softmax steps into pipelined multi-stage kernels reduces expensive multiple DRAM accesses to a single pass through the data, leveraging Triton's on-chip SRAM and pipelines. This decreases memory bandwidth usage, reduces kernel launch overhead, and enables higher TFLOPS throughput.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "f7c70bd0",
+            "content": "Using device-side tensor descriptors with blocking information enables kernels to perform tiled loads/stores with correct strides, reducing pointer arithmetic complexity and improving maintainability and performance. It also enables autotuning and dynamic adaptation to input sizes and hardware constraints.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3739c312",
+            "content": "Backward attention gradient computations are more complex due to multiple dependent intermediates and causality masking. Decomposing into separate specialized kernels ensures better register pressure management, easier masking integration, and improved parallelism.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "25e10e91",
+            "content": "Invoking external functions requires strict memory masking to prevent out-of-bounds accesses because these device lib functions assume valid inputs. The use of program_id arithmetic combined with ceiling division to compute grid size guarantees full coverage of the input tensor and supports inputs of arbitrary size. Customizing library paths ensures portable, backend-specific linkage which avoids runtime errors from missing external symbols.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        }
+    ],
+    "solutions_and_patterns": [
+        {
+            "id": "350d5429",
+            "content": "Use tl.arange combined with program_id and BLOCK_SIZE to partition vector workloads across parallel Triton programs, enabling scalable GPU computations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "4c163c8d",
+            "content": "Always create a mask (e.g. offsets < n_elements) to guard loads and stores against out-of-bounds memory access, ensuring memory safety even when input size is not a multiple of block size.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "2c25550a",
+            "content": "Pass meta-parameters as constexpr (e.g. BLOCK_SIZE: tl.constexpr) for compile-time specialization and optimizations in Triton kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "7aa571d9",
+            "content": "Use triton.cdiv to compute ceiling division when defining grid sizes, ensuring complete coverage of input elements with kernel launches.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "24a2ce1a",
+            "content": "Validate custom Triton kernels against PyTorch reference implementations by comparing output tensors and measuring maximum absolute difference to ensure correctness.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "1d8d7c2a",
+            "content": "Use Triton's built-in perf_report decorators and benchmarking utilities to automate performance testing over a range of input sizes, and visualize throughput against baseline implementations like PyTorch.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "309fcb18",
+            "content": "To preallocate output tensors for custom ops, use torch.empty_like to create output with the same shape and device as inputs, ensuring memory is allocated correctly before kernel launch.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3b5feb3e",
+            "content": "When performing loads/stores in Triton kernels, combine masking with conditional computation inside the kernel to skip invalid or zero-padding regions dynamically, reducing unnecessary memory operations and improving performance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "4c163c8d",
+                    "justification": "Refines general masking by adding conditional computation to further optimize kernel execution."
+                }
+            ]
+        },
+        {
+            "id": "4dc8e98f",
+            "content": "Partition multi-dimensional workloads in Triton by hierarchical block indexing: use tl.arange and program_id for the innermost dimension block, then use program_id arithmetic to map across outer dimensions, enabling scalable parallelism beyond flat vectors.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "350d5429",
+                    "justification": "More specific partition pattern specialized for multi-dimensional workloads compared to flat vector split."
+                }
+            ]
+        },
+        {
+            "id": "78a9d416",
+            "content": "Use triton.cdiv for computing grid sizes in kernels with multiple dimensions or multiple nested loops, ensuring complete coverage of input by kernel launches in each dimension consistently.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "7aa571d9",
+                    "justification": "Extends the single-dimension grid size calculation to multi-dimensional scenarios."
+                }
+            ]
+        },
+        {
+            "id": "be6a4982",
+            "content": "Implement softmax in Triton by fusing all steps (max, subtract max, exp, sum, division) into a single kernel, reducing memory reads/writes to ~MN elements and enabling a theoretical ~4x speedup over na\u00efve multi-kernel approaches.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "0fc4715d",
+            "content": "Use masking with padding to load rows whose sizes are not a power of two (BLOCK_SIZE >= next power of two of n_cols), setting masked elements to -inf for max reduction and zero for stores, preventing out-of-bounds memory accesses and ensuring numerical correctness.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "4c163c8d",
+                    "justification": "This masking pattern handles padded softmax rows specifically with -inf padding for max reduction, refining the general masking for load/store safety."
+                },
+                {
+                    "type": "REFINES",
+                    "target_id": "3b5feb3e",
+                    "justification": "Combines masking with conditional computation inside the kernel to optimize memory operations specifically in softmax kernel."
+                }
+            ]
+        },
+        {
+            "id": "2426ae52",
+            "content": "Apply numerical stabilization in softmax by subtracting the maximum element of each row before exponentiation within the kernel, preventing overflow and improving accuracy.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "73d603f6",
+            "content": "Tune kernel occupancy by dynamically estimating register and shared memory usage using precompiled kernel metadata and device properties (multiprocessor count, max registers, warp size), then compute num_programs accordingly to maximize GPU utilization without oversubscription.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "6ecd688e",
+            "content": "Partition softmax computation by assigning each Triton program to process multiple rows strided by program_id, enabling load balancing and parallelism over large 2D input tensors.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "350d5429",
+                    "justification": "Partitions softmax rows by row-strided load, which is a specific application of vector workload partitioning."
+                }
+            ]
+        },
+        {
+            "id": "df182068",
+            "content": "Preallocate output tensors with torch.empty_like input tensors to ensure output shape and device compatibility before kernel launch.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "7a813a30",
+            "content": "Benchmark custom fused kernels against native PyTorch implementations with variable input sizes and plot throughput in GB/s to validate performance gains and correctness.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "24a2ce1a",
+                    "justification": "Specializes the benchmarking pattern to fused softmax vs. PyTorch softmax performance comparison."
+                }
+            ]
+        },
+        {
+            "id": "0a17a924",
+            "content": "Partition large matrix multiplication workloads by mapping each Triton program_id to a 2D tile group: divide M and N dimensions into blocks (BLOCK_SIZE_M x BLOCK_SIZE_N), then group tiles by GROUP_SIZE_M along M dimension and all tiles along N, calculating pid_m and pid_n accordingly. This supports scalability and load balancing across threads and thread groups.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "07a1eeb7",
+            "content": "In persistent kernels, implement a warp or SM-aware launch grid limited to the number of multiprocessors (NUM_SMS) on the device to avoid oversubscription, iterating over all tiles in a flattened loop stride by NUM_SMS. This technique improves hardware utilization while avoiding kernel launch overhead and resource contention.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "bf729130",
+            "content": "Use duplicated tile counters (e.g., tile_id and tile_id_c offset by NUM_SMS) inside persistent kernels to break dependencies between prologue and epilogue phases of computation, serving as a workaround for known pipeline bugs in some GPU architectures (e.g., Blackwell), enabling reliable pipelined execution without stalls or incorrect behaviors.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "8bcf2e4e",
+            "content": "Fuse load, compute, and store stages in persistent matmul kernels by streaming over K dimension in blocks (BLOCK_SIZE_K), loading tiles from A and B tensors with proper masking for boundary conditions, and accumulating partial dot products in fp32 accumulators before converting to output dtype (fp16 or fp8). This reduces global memory traffic and improves throughput.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "503c731d",
+            "content": "Implement autotuning with diverse kernel configurations over block sizes (M, N, K), number of warps and pipeline stages, and specialized flags like warp specialization and epilogue subtile, combined with pre-hooks to adjust tensor descriptor block shapes dynamically. This allows empirical optimization per device and workload characteristics.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "c717ac1f",
+            "content": "Use Triton's device-side tensor descriptor APIs to create and load/store tiled subviews of tensors directly within kernels, enabling more expressive and efficient memory access patterns for TMA and warp-specialized matmul kernels, simplifying pointer arithmetic and increasing maintainability.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "e7944ee4",
+            "content": "Apply epilogue subtiling by partitioning the output accumulator tile into subtiles (e.g., split BLOCK_SIZE_N dimension) and store them separately to reduce shared memory consumption during epilogue stages, allowing higher pipeline stages or more warps for concurrency, beneficial especially on devices with limited shared memory.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "e8a0a6f8",
+            "content": "Dynamically query device properties like number of streaming multiprocessors (NUM_SMS) and adjust launch grid size and kernel occupancy accordingly, for example, by limiting launch dimension to NUM_SMS or the number of tiles, whichever is smaller. This approach ensures that no SM is oversubscribed and maximizes throughput.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "7f5c3be4",
+            "content": "Integrate native device BLAS libraries (cuBLAS or hipBLAS) alongside Triton kernels and benchmark against them using proton profiler to validate functional correctness and measure relative performance across diverse matrix sizes and data types such as FP16 and FP8, providing comprehensive baseline comparisons.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "dda6b8a3",
+            "content": "Verify outputs of optimized kernels by comparing them against simpler baseline implementations (e.g., naive Triton matmul or PyTorch matmul) with element-wise tolerance checks (e.g., atol=1.0 for fp16) ensuring numerical accuracy while allowing performance-driven approximations in mixed precision and specialized kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "332d3ca8",
+            "content": "For parallel reduction of gradients in Triton kernels, partition the input rows into GROUP_SIZE_M independent buffers in L2 cache, and use a locking mechanism with atomic compare-and-swap to safely accumulate partial gradients (e.g., dw and db) across kernel instances, enabling concurrent writes without data races or corruption.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "bcf656cf",
+            "content": "Implement a two-stage gradient reduction for learnable parameters in LayerNorm backward: 1) accumulate partial gradients in multiple buffers using locked atomic updates across thread blocks; 2) launch a separate kernel to sum these partial sums into final gradients. This division balances parallelism and correct synchronization.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "ed19047e",
+            "content": "Use vectorized loads with masking to safely read input rows where the feature dimension N may not be a multiple of BLOCK_SIZE, providing zero or neutral values for out-of-bound indices to avoid illegal memory accesses and ensure numerical stability in softmax or layer norm calculations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3027c8cc",
+            "content": "In LayerNorm backward, preload mean and reciprocal stddev per row, then compute normalized inputs (x_hat) on-the-fly inside the kernel to minimize memory bandwidth and improve numerical stability during gradient computations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "60d17dbb",
+            "content": "Employ tl.debug_barrier() after updates under locks to ensure all threads of a kernel instance have finished writes before releasing locks, preventing race conditions during parallel gradient updates in GPU kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "19e9452a",
+            "content": "Use specialized multilevel blocked and packed scale tensor layouts for block scaled matrix multiplication to ensure contiguous and coalesced memory access in tensor core MMA operations. For NVIDIA GPUs, reshape scale factors into 5D layouts (e.g., (M//128, K//VEC_SIZE//4, 32, 4, 4)) and transpose accordingly before loading/scaling within dot_scaled kernels. For AMD GPUs with CDNA4 MFMA instructions, implement explicit scale tensor shuffling that reorganizes scales per warp/thread to enable vectors of scales contiguous in memory for efficient loads inside the kernel.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "cdcfebae",
+                    "justification": "Proper layout and reshaping of scale tensors is prerequisite to correct use of tensor descriptors representing packed scales."
+                },
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "6be83173",
+                    "justification": "The layout enables the explained memory access improvements."
+                }
+            ]
+        },
+        {
+            "id": "d80c4cd5",
+            "content": "When launching block scaled matmul Triton kernels, partition the workload into 2D tiles sized by BLOCK_M x BLOCK_N with blocking over the K dimension in BLOCK_K chunks, using grid dimensions computed via ceiling division to cover entire input matrices. Program IDs are mapped to M and N tile indices by modulo and division. This ensures deterministic, complete coverage and proper scale factor indexing.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "cdcfebae",
+            "content": "Use Triton\u2019s TensorDescriptor abstractions to represent blocked and tiled views of input and output tensors, including scale factor tensors, enabling direct multi-dimensional load/store with correct strides and memory layouts without manual pointer arithmetic.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "d8a93553",
+            "content": "Mask boundary conditions for load and store operations in kernels with large blocking sizes and packed data layouts (e.g., packed FP4 with 2 elements per byte) to avoid out-of-bounds memory accesses especially when input dimensions are not multiples of block sizes. Use boolean masks on offsets for idx checking and apply appropriate zero or neutral element padding.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "58f8b019",
+                    "justification": "Correct masking is necessary to prevent boundary load/store errors."
+                }
+            ]
+        },
+        {
+            "id": "cc12acab",
+            "content": "Leverage Triton\u2019s tl.dot_scaled primitive with appropriate scaling modes (e.g., 'e4m3', 'e2m1') and accounting for types such as packed fp4 and fp8. This fused instruction performs scaling of input tiles by broadcast scale tensors inline with MMA, enhancing performance and numerical correctness by avoiding separate scaling passes.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "615776df",
+                    "justification": "The dot_scaled primitive fusion enables the performance advantages explained in meta reasoning."
+                }
+            ]
+        },
+        {
+            "id": "15e5273b",
+            "content": "To implement efficient block scaled matmul on AMD CDNA4 GPUs, preprocess scale tensors with a specialized shuffle that rearranges scales into a dimension order aligned with warp and thread layouts. This improves global memory coalescing and enables contiguous vector loads of scale values needed per thread for MFMA instructions.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "561dc8ba",
+                    "justification": "The shuffle preprocessing is required to avoid failed uncoalesced scale loads on AMD."
+                },
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "54957361",
+                    "justification": "The shuffle pattern is necessary for the reasoning about coalesced loads."
+                }
+            ]
+        },
+        {
+            "id": "60f4ea6c",
+            "content": "Compare Triton custom block scaled matmul kernel outputs against carefully computed float32 references and, when available, vendor cuBLASLt block scaled matmul baselines to validate numerical correctness within specified tolerances (e.g., atol=1e-3). Use torch.testing.assert_close for rigorous automated validation.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "12881202",
+                    "justification": "Validation catches errors caused by descriptor mismatches."
+                }
+            ]
+        },
+        {
+            "id": "f038d931",
+            "content": "Pre-allocate output tensors with torch.empty using correct dtype and device, ensuring proper tensor sizes matching kernel output dimensions before kernel launch.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "f5f40515",
+            "content": "Use triton.cdiv (ceiling division) to compute kernel launch grid sizes per dimension, ensuring full coverage of input matrices and scale factor tiles without missing edge tiles.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "c4dd0242",
+            "content": "Implement grouped GEMM kernels by statically iterating over multiple GEMM problems inside a single kernel and assigning tiles to different program_ids with a stride equal to the number of virtual SMs, enabling load-balanced parallel execution over all tiles from all problems.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "8bdfca5d",
+            "content": "Use autotuning of block sizes (M, N, K) along with number of pipeline stages and warps to empirically find performant configurations per device and problem characteristics for grouped GEMM Triton kernels, including TMA-based implementations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "1ba6b4b9",
+            "content": "Validate grouped GEMM implementations by comparing output tensors elementwise against trusted PyTorch matmul results using relaxed tolerances (e.g., atol=1e-2) to accommodate mixed precision computations and fused kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "27271295",
+            "content": "Pre-allocate output matrices with torch.empty using the input matrix shapes and dtypes before kernel invocation to ensure correct memory allocation and device placement for grouped GEMM results.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "f78bb925",
+            "content": "For TMA-based grouped GEMM kernels, create tensor descriptors with shape, strides, and blocking for inputs and outputs inside the kernel to enable efficient tiled loads and stores with hardware-accelerated memory operations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "9418dca7",
+            "content": "Map tile indices in grouped GEMM to 2D tile coordinates per GEMM via modulo and division operations over the number of tiles per M and N dimension, enabling correct tile assignment for arbitrary matrix sizes and batches.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "d68d0292",
+            "content": "Advance tile indices by NUM_SM (number of virtual SMs) within the kernel loop to iterate over tiles assigned to the current program, enabling static scheduling and load balancing across hardware resources.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "ce2af0be",
+            "content": "Check device capability and backend before enabling TMA-based kernels to ensure hardware support for advanced memory accesses and avoid unsupported execution paths.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "ef3c2196",
+            "content": "Implement dropout in Triton kernels by generating the dropout mask on-the-fly using a seeded parallel PRNG (e.g., tl.rand(seed, offsets)) inside the kernel, instead of precomputing and storing a dropout mask tensor, thus reducing memory footprint and simplifying randomness management.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "66448211",
+                    "justification": "Seeded dropout mask generation internally replaces explicit mask storage, addressing the shortcomings of static dropout mask usage."
+                }
+            ]
+        },
+        {
+            "id": "cdc52289",
+            "content": "Always apply masking to load and store offsets computed from block indices and program ids (e.g., offsets < n_elements) in dropout and similar kernels to ensure safe access and prevent out-of-bounds errors when input tensors have sizes not divisible by block size.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "a14666fa",
+                    "justification": "Masking load/store offsets in dropout kernels refines the generic boundary masking pattern to the specific context of dropout."
+                }
+            ]
+        },
+        {
+            "id": "a51fb1ed",
+            "content": "Implement fused multi-stage forward attention kernels by partitioning the softmax computation into pipeline stages, each processing data blocks with careful masking and exponential scaling, to reduce global memory traffic and register pressure. Use autotuning over block sizes, number of warps, and pipeline stages combined with tensor descriptors to achieve high GPU utilization and numerical stability.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "be6a4982",
+                    "justification": "This fused attention multi-stage softmax kernel is a more specialized and optimized version of the general fused softmax implementation."
+                }
+            ]
+        },
+        {
+            "id": "6dd1cb15",
+            "content": "Use Triton's device-side TensorDescriptor APIs to create blocked and tiled tensor views for Q, K, V, and output tensors within kernels to simplify memory access logic, enable flexible blocking shapes, and allow dynamic shape adaptation during autotuning or runtime pre-hooks.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "cdcfebae",
+                    "justification": "Use of Triton's device-side tensor descriptors with blocking is a direct and more advanced evolution of generic tensor descriptor usage in kernels."
+                }
+            ]
+        },
+        {
+            "id": "a10ee81b",
+            "content": "In backward attention computation, split workload into multiple kernel stages for efficient computation of gradients dK, dV, and dQ separately. Use masking to handle causal attention patterns correctly, and broadcasted scales to ensure numerical stability and correctness of gradient computations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "bf729130",
+                    "justification": "Both describe multi-stage strategies to split gradient computations across kernels for correctness and performance."
+                }
+            ]
+        },
+        {
+            "id": "fd82fb1a",
+            "content": "For attention kernels supporting FP8 data types, permute and block tensors (e.g., transpose V) and specialize kernel configurations to address hardware limitations and ensure proper data layout for tensor core matmul operations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "15e5273b",
+                    "justification": "Both describe tensor layout adjustments and permutations needed specifically for FP8 data types in high-performance kernels."
+                }
+            ]
+        },
+        {
+            "id": "71f245e7",
+            "content": "Apply autotuning with filtering and pruning of invalid configurations based on kernel block sizes and device constraints (e.g., Hopper device FP8 dot product limitations and blackwell register limits), to ensure generated kernels run efficiently and correctly on target GPUs.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "503c731d",
+                    "justification": "Both address autotuning kernel configurations with filtering of invalid setups to optimize performance in Triton."
+                }
+            ]
+        },
+        {
+            "id": "f853571d",
+            "content": "Use explicit numeric constants like LN2 and carefully scaled log and exp2 operations instead of naive exp to improve numerical stability and performance in softmax computations within attention kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "2426ae52",
+                    "justification": "Both address numerical stabilization methods in softmax computations to improve accuracy and avoid overflow."
+                }
+            ]
+        },
+        {
+            "id": "7212a57d",
+            "content": "Implement test cases comparing outputs and gradients of fused Triton attention kernels with PyTorch reference implementations under varying batch size, number of heads, context size, head dimension, causality, and data types to ensure functional correctness and numerical accuracy.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "24a2ce1a",
+                    "justification": "Validating attention kernels against PyTorch reference implementations is a specific application of output validation pattern."
+                }
+            ]
+        },
+        {
+            "id": "6d283612",
+            "content": "Benchmark custom fused attention kernels against native Flash Attention and other baseline implementations across various sequence lengths and data types, reporting TFLOPS metrics to measure throughput and efficiency gains from kernel fusion and optimization.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "7a813a30",
+                    "justification": "Benchmarks of fused attention kernels extend general Triton kernel benchmarking methodology with domain-specific metrics and configurations."
+                }
+            ]
+        },
+        {
+            "id": "53da7b29",
+            "content": "Use grouped program_id launch order in 1D kernels computing 2D blocked matmul (grouping rows by GROUP_SIZE_M) to improve L2 cache reuse and reduce data traffic, by first computing a group of contiguous rows before moving to the next column block. Compute pid_m and pid_n from pid accordingly to implement this pattern.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "1e268364",
+            "content": "Implement multi-dimensional pointer arithmetic for blocked matrix accesses by indexing rows and columns with arange offsets combined with strides, and apply modulo padding on indices exceeding matrix dimensions, relying on masked loads to discard invalid data safely.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "46211648",
+            "content": "Accumulate intermediate matrix multiplication results in fp32 within Triton kernels before casting back to fp16 or desired output dtype after the K loop to improve numerical stability and accuracy for reduced precision input types.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "c0e2f036",
+            "content": "Fuse activation functions such as leaky ReLU directly inside the matmul kernel after accumulation and before storing output by using a meta-parameter-based control flow, enabling single-pass computation and reducing memory traffic.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "4ae5f721",
+            "content": "Calculate launch grid size for 2D blocked matmul kernels as the product of ceil-divisions of M and N dimensions by block sizes (BLOCK_SIZE_M, BLOCK_SIZE_N), and launch a 1D grid. Decode program_id to 2D tile indices using modulo and division, adjusted with grouped ordering as above.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "71df756a",
+            "content": "Apply masking on load/store operations using boolean masks derived from arange offsets compared to dimension sizes to prevent out-of-bounds accesses on matrices with dimensions not divisible by block sizes, substituting zeros (or safe values) when masked.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "c7322d8e",
+            "content": "Use constexpr meta-parameters for block sizes and group size to enable compile-time optimizations and specialized kernel code generation, improving arithmetic intensity and reducing pointer calculation overhead.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "ac7c0292",
+            "content": "Pre-allocate output tensors on the correct device and with the expected shape and dtype using torch.empty before kernel invocation, ensuring memory is ready and preventing runtime shape errors.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "9f1aadcf",
+            "content": "Benchmark custom Triton kernels against native vendor libraries (e.g., cuBLAS or rocBLAS) by varying input sizes and precision modes (fp16, fp8), and report achieved TFLOPS to validate performance parity or superiority, using triton.testing.Benchmark utilities for automation and plotting.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "7d0f48c4",
+            "content": "For fp8 inputs, transpose matrix B before kernel invocation to produce a data layout compatible with Triton's matmul API and hardware accelerators, avoiding dimension mismatch or unsupported load/store patterns.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "536533ee",
+            "content": "Invoke external device math functions (e.g. libdevice.asin) inside Triton kernels by loading input tiles with masking for boundary safety, applying the extern function element-wise, then storing results masked. Use program_id with BLOCK_SIZE and ceiling division to split work over input elements safely.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "4c163c8d",
+                    "justification": "Masked load/store with program_id partitioning is a specialized application of the general masking pattern for safety when calling external functions."
+                },
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "7aa571d9",
+                    "justification": "Correct grid size computation by ceiling division is prerequisite for complete partitioning of the workload before invoking external functions."
+                }
+            ]
+        },
+        {
+            "id": "cbc32c6b",
+            "content": "Customize the libdevice external library path per backend (CUDA or HIP) by detecting runtime backend and specifying the correct bitcode library file to the kernel launch (extern_libs argument). This enables Triton kernels to invoke target-architecture device math functions without hardcoded paths.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "PREREQUISITE",
+                    "target_id": "536533ee",
+                    "justification": "Custom library path specification must be done before invoking external libdevice functions to ensure correct linkage at runtime."
+                }
+            ]
+        },
+        {
+            "id": "09649182",
+            "content": "Use masked vector loads and stores with offsets computed from program_id * BLOCK_SIZE + tl.arange to prevent out-of-bounds accesses when input size is not divisible by BLOCK_SIZE. This pattern ensures memory safety and correctness for custom kernels invoking external functions.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "REFINES",
+                    "target_id": "4c163c8d",
+                    "justification": "This explicitly states the use of masked vectorized IO offsets with program_id for boundary safety, refining the generic masking pattern."
+                }
+            ]
+        }
+    ],
+    "failed_attempts": [
+        {
+            "id": "a14666fa",
+            "content": "Accessing memory beyond the vector size without masking leads to out-of-bounds errors or incorrect results, especially when input size is not a multiple of block size.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "89c4a606",
+            "content": "Launching kernels with grid sizes computed via floor division causes incomplete coverage of input elements, leaving some data unprocessed.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "67b411db",
+            "content": "Not combining masking with conditional computation leads to wasted memory bandwidth and potential incorrect results when padding or invalid indices are processed unnecessarily.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "e844643c",
+            "content": "Na\u00efve softmax implementations that perform multiple separate kernels for max, subtract, exp, sum, and division cause excessive global memory reads and writes (~5MN reads and 3MN writes for input size MxN), resulting in significant bandwidth waste and slow performance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "2688fb91",
+            "content": "Failing to mask out indices beyond the input column size when block size is rounded up to a power of two causes out-of-bounds memory loads/stores, producing incorrect results or triggering memory faults.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3537ca0e",
+            "content": "Using static kernel launch grid size without occupancy or resource awareness leads to suboptimal GPU utilization and underperformance.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "855923f3",
+            "content": "Launching persistent kernels with a static grid size exceeding the number of available streaming multiprocessors (SMs) results in oversubscription, causing resource contention and degraded performance or kernel scheduling issues.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "54fafc9c",
+            "content": "Attempting to pipeline prologue and epilogue loops using the same tile counter variable causes pipeline hazards or incorrect execution on some GPUs with newer architectures (e.g., Blackwell), manifesting as runtime failures or corrupted output.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "4d32c4e8",
+            "content": "Mismatch between input tensors shape assumptions (e.g., expecting B to be transposed but passing it in original memory layout) leads to dimension incompatibility errors or silently incorrect results in matmul kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "fcae4de7",
+            "content": "Failing to reshape and transpose scale factor tensors to the packed 5D format before dot_scaled calls results in non-contiguous or misaligned scale accesses, producing incorrect scaling or invalid memory accesses during MMA operations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "58f8b019",
+            "content": "Not masking load/store offsets related to packed FP4/FP8 element layouts can cause out-of-bounds memory access or garbage data reads/writes at matrix edges when input sizes are not divisible by block sizes.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "561dc8ba",
+            "content": "Ignoring AMD CDNA4 scale tensor shuffling leads to uncoalesced scale vector loads causing memory performance degradation and potentially incorrect scaling as threads see scales in wrong locations.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "12881202",
+            "content": "Mismatch between tensor descriptor strides/layouts and the physical memory arrangement of inputs or scales causes dimension incompatibility or silently incorrect results in kernel matrix multiplication.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "59754ab1",
+            "content": "Incorrect dimension assumptions in grouped GEMM (e.g., assuming B is transposed but passing non-transposed B) lead to dimension mismatch errors or silently incorrect results.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "66448211",
+            "content": "Storing large dropout mask tensors incurs high memory overhead and complicates managing RNG states especially when recomputing activations for backpropagation, making this unsuitable for memory-constrained or checkpointing scenarios.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": []
+        },
+        {
+            "id": "3721e93e",
+            "content": "Naively implementing softmax attention as multiple separate kernels that perform max, subtract max, exp, sum, and divide results in excessive global memory traffic (~5MN reads and ~3MN writes) causing low kernel throughput and performance bottlenecks.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "e844643c",
+                    "justification": "Both describe failures caused by naive, multi-pass softmax implementations resulting in high memory bandwidth usage."
+                }
+            ]
+        },
+        {
+            "id": "10efda5a",
+            "content": "Incorrect or missing tensor descriptor block shapes and strides in Triton kernels cause dimension incompatibility errors or silently incorrect results during multi-dimensional blocked tensor accesses in attention or matmul kernels.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "12881202",
+                    "justification": "Describe dimension or stride mismatches causing silent or explicit correctness errors in kernel executions."
+                }
+            ]
+        },
+        {
+            "id": "2da4d3fc",
+            "content": "Ignoring the need to permute or transpose key/value tensors for FP8 data types leads to unsupported load/store patterns or invalid memory accesses on some GPU architectures, causing kernel failures or incorrect results.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "fcae4de7",
+                    "justification": "Both describe errors stemming from incorrect handling of FP8 tensor layout and transposition."
+                }
+            ]
+        },
+        {
+            "id": "d5bc9f3b",
+            "content": "Not applying correct masking for causal attention during backward passes results in incorrect gradient computations since out-of-band (future) token contributions are not masked, breaking causal masking assumptions.",
+            "usage_count": 0,
+            "last_used_iter": -1,
+            "created_iter": 0,
+            "variations": [],
+            "edge_cases": [],
+            "relations": [
+                {
+                    "type": "SIMILAR",
+                    "target_id": "2688fb91",
+                    "justification": "Both describe incorrect handling of masking boundaries leading to memory or computation correctness issues."
+                }
+            ]
+        }
+    ]
+}

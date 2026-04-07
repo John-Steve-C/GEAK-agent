@@ -69,6 +69,15 @@ class CheatsheetManager:
                 if 'edge_cases' in item and item['edge_cases']:
                     for e in item['edge_cases']:
                         output.append(f"  - Note: {e['content']}")
+
+                # Render explicit relations so future prompt generation can use them.
+                if 'relations' in item and item['relations']:
+                    for r in item['relations']:
+                        justification = r.get('justification', '').strip()
+                        relation_line = f"  - Relation ({r.get('type', 'UNKNOWN')} -> {r.get('target_id', 'UNKNOWN')})"
+                        if justification:
+                            relation_line += f": {justification}"
+                        output.append(relation_line)
             
             output.append("") # Empty line for spacing
             
@@ -650,6 +659,440 @@ If NO high-quality delta insight exists, return:
             previous_cheatsheet=self.to_string_for_prompt(),    # use full cheatsheet when updating dc itself
             raw_prompt=raw_prompt
         )
+
+    def build_prompt_relation(self, question: str, model_answer: str, model_reflection: str) -> str:
+        template = """
+You are a master curator of long-term technical knowledge.
+
+Your task is to extract **high-value, reusable insights** from the latest model attempt and integrate them into a structured cheatsheet with three sections:
+- meta_reasoning
+- solutions_and_patterns
+- failed_attempts
+
+Additionally, you may define **explicit relationships between items** to improve structure and reuse.
+
+----------------------------------------
+
+**CRITICAL PRINCIPLE: THREE-LAYER EXTRACTION**
+
+Each useful insight should be understood across three levels:
+
+1. FAILED_ATTEMPT (what went wrong)
+2. SOLUTION_PATTERN (what to do)
+3. META_REASONING (why it works)
+
+You do NOT always need to output all three,
+but your extraction should follow this structure.
+
+----------------------------------------
+
+**SECTION ROLES (STRICT):**
+
+1. solutions_and_patterns (PRIMARY, REQUIRED)
+   - Actionable, directly reusable guidance
+   - Drives generation performance → DO NOT under-extract
+
+2. meta_reasoning (SECONDARY, HIGH-QUALITY ONLY)
+   - Causal insights: failure → fix → mechanism
+   - Only include if clear and non-trivial
+
+3. failed_attempts (DIAGNOSTIC, CONCRETE)
+   - Precise, recognizable failure modes
+   - Helps detect similar future errors
+
+----------------------------------------
+
+**RELATIONSHIP SYSTEM (REPLACES VARIATION):**
+
+You may optionally link items using explicit relationships.
+
+Allowed relationship types:
+
+- SIMILAR  
+  → same type of problem or solution pattern
+
+- REFINES  
+  → more specific or specialized version of another item
+
+- PREREQUISITE  
+  → must be applied before another item
+
+----------------------------------------
+
+**RELATIONSHIP RULES (STRICT):**
+
+- Only add relationships if HIGH confidence
+- Maximum 2 relationships per item
+- Prefer NO relationship over weak or speculative ones
+- Relationships must be useful for future reasoning or retrieval
+- If an existing relationship is wrong or should change, use UPDATE_RELATION instead of ADD_RELATION
+
+----------------------------------------
+
+**CRITICAL BALANCE RULES:**
+
+- ALWAYS prioritize extracting solutions_and_patterns
+- ONLY add meta_reasoning if there is a clear causal mechanism
+- Use failed_attempts to anchor important or recurring failures
+- Avoid generic or vague insights
+
+----------------------------------------
+
+**EXTRACTION PROCEDURE:**
+
+Step 1 — Identify Failure (if any)
+- What exactly went wrong?
+→ If precise and reusable → add to failed_attempts
+
+Step 2 — Extract Solution Pattern (MANDATORY)
+- What should the model DO next time?
+→ Add to solutions_and_patterns
+
+Step 3 — Derive Meta Reasoning (OPTIONAL)
+- Why did this fix work?
+→ Add to meta_reasoning only if causal and non-trivial
+
+Step 4 — Deduplication
+- If similar item exists → UPDATE instead of ADD
+- If a new item is a specialization of an existing item and you want to link it now, add the item with a ref_id and use that ref_id in ADD_RELATION
+- If a new item is closely related to an existing item, you may emit ADD + ADD_RELATION in the same response only by referencing the new item through its ref_id
+
+Step 5 — Relationship Linking (OPTIONAL)
+- Link to existing items only if clearly beneficial
+- NEVER invent placeholder IDs such as I_045
+- For newly added items in the same response, use the ADD operation's ref_id instead of inventing a runtime memory id
+- ADD_RELATION may reference either:
+  1. an existing item id from Previous Cheatsheet, or
+  2. a ref_id created by an ADD operation earlier in the same response
+- If you add a new item and want to relate it, the ADD must appear before the ADD_RELATION that references its ref_id
+
+----------------------------------------
+
+**QUALITY FILTER (STRICT):**
+
+Reject insights that are:
+- purely summarization
+- overly generic
+- not actionable (patterns)
+- not causal (meta_reasoning)
+
+----------------------------------------
+
+**Token Budget Rules:**
+- Target total cheatsheet length ≈ 10,000 tokens
+- Prefer refining over duplicating
+- Do not delete unless incorrect
+
+----------------------------------------
+
+**Context:**
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+Previous Cheatsheet:
+{previous_cheatsheet}
+
+Current Question:
+{question}
+
+Model Answer:
+{model_answer}
+
+Model Reflection:
+{model_reflection}
+
+----------------------------------------
+
+**Your Task:**
+
+Output ONLY a valid JSON object with:
+
+- reasoning: brief explanation
+- operations: list of updates
+
+----------------------------------------
+
+**Available Operations:**
+
+1. ADD
+   - section: one of [meta_reasoning, solutions_and_patterns, failed_attempts]
+   - content: high-level insight
+   - ref_id: optional local reference for use by later relation operations in the same response
+
+2. UPDATE
+   - target_id: memory item identifier
+   - content: refined description
+
+3. ADD_RELATION
+   - source_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - target_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - relation: one of [SIMILAR, REFINES, PREREQUISITE]
+   - justification: brief reason
+   - IMPORTANT: if referencing a newly added item, use its ref_id and place the ADD before ADD_RELATION
+
+4. UPDATE_RELATION
+   - source_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - target_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - relation: one of [SIMILAR, REFINES, PREREQUISITE]
+   - justification: brief reason
+   - IMPORTANT: use this only when the relation between the resolved items already exists and needs correction or refinement
+
+----------------------------------------
+
+**RESPONSE FORMAT (JSON ONLY):**
+
+{{
+  "reasoning": "...",
+  "operations": [
+    {{
+      "type": "ADD",
+      "section": "solutions_and_patterns",
+      "content": "Actionable pattern...",
+      "ref_id": "new_pattern_1"
+    }},
+    {{
+      "type": "ADD",
+      "section": "meta_reasoning",
+      "content": "Failure → fix → why"
+    }},
+    {{
+      "type": "ADD_RELATION",
+      "source_id": "new_pattern_1",
+      "target_id": "existing_target_id",
+      "relation": "REFINES",
+      "justification": "This new pattern is a more specific case of an existing pattern already present in the cheatsheet"
+    }},
+    {{
+      "type": "UPDATE_RELATION",
+      "source_id": "existing_source_id",
+      "target_id": "existing_target_id",
+      "relation": "PREREQUISITE",
+      "justification": "This dependency is stronger than a generic similarity link"
+    }}
+  ]
+}}
+"""
+        return template.format(
+            cheatsheet_stats=self.get_stats(),
+            previous_cheatsheet=self.to_string_for_prompt(),    # use full cheatsheet when updating dc itself
+            question=question,
+            model_answer=model_answer,
+            model_reflection=model_reflection
+        )
+    
+    def build_prompt_relation_no_qa(self, raw_prompt) -> str:
+        template = """
+You are a master curator of long-term technical knowledge.
+
+Your task is to extract **high-value, reusable insights** from the latest model attempt and integrate them into a structured cheatsheet with three sections:
+- meta_reasoning
+- solutions_and_patterns
+- failed_attempts
+
+Additionally, you may define **explicit relationships between items** to improve structure and reuse.
+
+----------------------------------------
+
+**CRITICAL PRINCIPLE: THREE-LAYER EXTRACTION**
+
+Each useful insight should be understood across three levels:
+
+1. FAILED_ATTEMPT (what went wrong)
+2. SOLUTION_PATTERN (what to do)
+3. META_REASONING (why it works)
+
+You do NOT always need to output all three,
+but your extraction should follow this structure.
+
+----------------------------------------
+
+**SECTION ROLES (STRICT):**
+
+1. solutions_and_patterns (PRIMARY, REQUIRED)
+   - Actionable, directly reusable guidance
+   - Drives generation performance → DO NOT under-extract
+
+2. meta_reasoning (SECONDARY, HIGH-QUALITY ONLY)
+   - Causal insights: failure → fix → mechanism
+   - Only include if clear and non-trivial
+
+3. failed_attempts (DIAGNOSTIC, CONCRETE)
+   - Precise, recognizable failure modes
+   - Helps detect similar future errors
+
+----------------------------------------
+
+**RELATIONSHIP SYSTEM (REPLACES VARIATION):**
+
+You may optionally link items using explicit relationships.
+
+Allowed relationship types:
+
+- SIMILAR  
+  → same type of problem or solution pattern
+
+- REFINES  
+  → more specific or specialized version of another item
+
+- PREREQUISITE  
+  → must be applied before another item
+
+----------------------------------------
+
+**RELATIONSHIP RULES (STRICT):**
+
+- Only add relationships if HIGH confidence
+- Maximum 2 relationships per item
+- Prefer NO relationship over weak or speculative ones
+- Relationships must be useful for future reasoning or retrieval
+- If an existing relationship is wrong or should change, use UPDATE_RELATION instead of ADD_RELATION
+
+----------------------------------------
+
+**CRITICAL BALANCE RULES:**
+
+- ALWAYS prioritize extracting solutions_and_patterns
+- ONLY add meta_reasoning if there is a clear causal mechanism
+- Use failed_attempts to anchor important or recurring failures
+- Avoid generic or vague insights
+
+----------------------------------------
+
+**EXTRACTION PROCEDURE:**
+
+Step 1 — Identify Failure (if any)
+- What exactly went wrong?
+→ If precise and reusable → add to failed_attempts
+
+Step 2 — Extract Solution Pattern (MANDATORY)
+- What should the model DO next time?
+→ Add to solutions_and_patterns
+
+Step 3 — Derive Meta Reasoning (OPTIONAL)
+- Why did this fix work?
+→ Add to meta_reasoning only if causal and non-trivial
+
+Step 4 — Deduplication
+- If similar item exists → UPDATE instead of ADD
+- If a new item is a specialization of an existing item and you want to link it now, add the item with a ref_id and use that ref_id in ADD_RELATION
+- If a new item is closely related to an existing item, you may emit ADD + ADD_RELATION in the same response only by referencing the new item through its ref_id
+
+Step 5 — Relationship Linking (OPTIONAL)
+- Link to existing items only if clearly beneficial
+- NEVER invent placeholder IDs such as I_045
+- For newly added items in the same response, use the ADD operation's ref_id instead of inventing a runtime memory id
+- ADD_RELATION may reference either:
+  1. an existing item id from Previous Cheatsheet, or
+  2. a ref_id created by an ADD operation earlier in the same response
+- If you add a new item and want to relate it, the ADD must appear before the ADD_RELATION that references its ref_id
+
+----------------------------------------
+
+**QUALITY FILTER (STRICT):**
+
+Reject insights that are:
+- purely summarization
+- overly generic
+- not actionable (patterns)
+- not causal (meta_reasoning)
+
+----------------------------------------
+
+**Token Budget Rules:**
+- Target total cheatsheet length ≈ 10,000 tokens
+- Prefer refining over duplicating
+- Do not delete unless incorrect
+
+----------------------------------------
+
+**Context:**
+
+Current Cheatsheet Stats:
+{cheatsheet_stats}
+
+Previous Cheatsheet:
+{previous_cheatsheet}
+
+Current Context:
+{raw_prompt}
+
+----------------------------------------
+
+**Your Task:**
+
+Output ONLY a valid JSON object with:
+
+- reasoning: brief explanation
+- operations: list of updates
+
+----------------------------------------
+
+**Available Operations:**
+
+1. ADD
+   - section: one of [meta_reasoning, solutions_and_patterns, failed_attempts]
+   - content: high-level insight
+   - ref_id: optional local reference for use by later relation operations in the same response
+
+2. UPDATE
+   - target_id: memory item identifier
+   - content: refined description
+
+3. ADD_RELATION
+   - source_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - target_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - relation: one of [SIMILAR, REFINES, PREREQUISITE]
+   - justification: brief reason
+   - IMPORTANT: if referencing a newly added item, use its ref_id and place the ADD before ADD_RELATION
+
+4. UPDATE_RELATION
+   - source_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - target_id: existing item id from Previous Cheatsheet OR a ref_id from an earlier ADD in the same response
+   - relation: one of [SIMILAR, REFINES, PREREQUISITE]
+   - justification: brief reason
+   - IMPORTANT: use this only when the relation between the resolved items already exists and needs correction or refinement
+
+----------------------------------------
+
+**RESPONSE FORMAT (JSON ONLY):**
+
+{{
+  "reasoning": "...",
+  "operations": [
+    {{
+      "type": "ADD",
+      "section": "solutions_and_patterns",
+      "content": "Actionable pattern...",
+      "ref_id": "new_pattern_1"
+    }},
+    {{
+      "type": "ADD",
+      "section": "meta_reasoning",
+      "content": "Failure → fix → why"
+    }},
+    {{
+      "type": "ADD_RELATION",
+      "source_id": "new_pattern_1",
+      "target_id": "existing_target_id",
+      "relation": "REFINES",
+      "justification": "This new pattern is a more specific case of an existing pattern already present in the cheatsheet"
+    }},
+    {{
+      "type": "UPDATE_RELATION",
+      "source_id": "existing_source_id",
+      "target_id": "existing_target_id",
+      "relation": "PREREQUISITE",
+      "justification": "This dependency is stronger than a generic similarity link"
+    }}
+  ]
+}}
+"""
+        return template.format(
+            cheatsheet_stats=self.get_stats(),
+            previous_cheatsheet=self.to_string_for_prompt(),    # use full cheatsheet when updating dc itself
+            raw_prompt=raw_prompt
+        )
     
     def prune_length(self, max_length: int = 1000000, max_items: int = 100):
         """Prunes the cheatsheet to keep only the most recent items up to max_items."""
@@ -810,6 +1253,7 @@ RESPONSE FORMAT (JSON ONLY):
             parsed = json.loads(clean_response)
             ops = parsed.get("operations", [])
             reasoning = parsed.get("reasoning", "No reasoning provided.")
+            temp_id_map = {}
             
             # print(f"Applying changes based on: {reasoning}")
             
@@ -817,7 +1261,7 @@ RESPONSE FORMAT (JSON ONLY):
                 op_type = op.get("type", "").upper()
                 
                 if op_type == "ADD":
-                    self._op_add(op)
+                    self._op_add(op, temp_id_map)
                 elif op_type == "UPDATE":
                     self._op_update(op)
                 elif op_type == "VARIATION":
@@ -826,6 +1270,10 @@ RESPONSE FORMAT (JSON ONLY):
                     self._op_expand(op)
                 elif op_type == "REMOVE":
                     self._op_remove(op)
+                elif op_type == "ADD_RELATION":
+                    self._op_add_relation(op, temp_id_map)
+                elif op_type == "UPDATE_RELATION":
+                    self._op_update_relation(op, temp_id_map)
                 # Edge case for misunderstood operation naming
                 elif op_type == "META_REASONING":
                     op.section = "meta_reasoning"
@@ -853,9 +1301,15 @@ RESPONSE FORMAT (JSON ONLY):
 
     # --- Operation Implementations ---
 
-    def _op_add(self, op):
+    def _resolve_item_reference(self, item_id: str, temp_id_map: Optional[Dict[str, str]] = None) -> str:
+        if temp_id_map and item_id in temp_id_map:
+            return temp_id_map[item_id]
+        return item_id
+
+    def _op_add(self, op, temp_id_map: Optional[Dict[str, str]] = None):
         section = op.get("section").lower()
         content = op.get("content")
+        ref_id = op.get("ref_id")
         
         if section not in self.sections:
             # Fallback if LLM hallucinates a section
@@ -872,6 +1326,8 @@ RESPONSE FORMAT (JSON ONLY):
             "edge_cases": []           
         }
         self.data[section].append(new_item)
+        if temp_id_map is not None and ref_id:
+            temp_id_map[ref_id] = new_item["id"]
         print(f" + ADDED to {section}: {content[:50]}...")
 
     def _op_update(self, op):
@@ -922,6 +1378,100 @@ RESPONSE FORMAT (JSON ONLY):
             print(f" - REMOVED {target_id}")
         else:
             print(f" ! FAILED REMOVE: ID {target_id} not found.")
+
+    def _op_add_relation(self, op, temp_id_map: Optional[Dict[str, str]] = None):
+        source_id = self._resolve_item_reference(op.get("source_id"), temp_id_map)
+        target_id = self._resolve_item_reference(op.get("target_id"), temp_id_map)
+        relation = op.get("relation")
+        justification = op.get("justification", "")
+        allowed_relations = {"SIMILAR", "REFINES", "PREREQUISITE"}
+
+        if not source_id or not target_id:
+            print(" ! FAILED ADD_RELATION: source_id and target_id are required.")
+            return
+
+        if source_id == target_id:
+            print(f" ! FAILED ADD_RELATION: Self-relations are not allowed for ID {source_id}.")
+            return
+
+        if not isinstance(relation, str):
+            print(f" ! FAILED ADD_RELATION: Invalid relation type {relation}.")
+            return
+
+        relation = relation.upper()
+        if relation not in allowed_relations:
+            print(f" ! FAILED ADD_RELATION: Unsupported relation type {relation}.")
+            return
+        
+        source_item, _ = self._find_item_by_id(source_id)
+        target_item, _ = self._find_item_by_id(target_id)
+        
+        if source_item and target_item:
+            if "relations" not in source_item:
+                source_item["relations"] = []
+
+            existing_relations = source_item["relations"]
+            duplicate_exists = any(
+                existing.get("type") == relation and existing.get("target_id") == target_id
+                for existing in existing_relations
+            )
+            if duplicate_exists:
+                print(f" ! SKIPPED ADD_RELATION: {source_id} --{relation}--> {target_id} already exists.")
+                return
+
+            if len(existing_relations) >= 2:
+                print(f" ! FAILED ADD_RELATION: Source ID {source_id} already has the maximum of 2 relations.")
+                return
+
+            source_item["relations"].append({
+                "type": relation,
+                "target_id": target_id,
+                "justification": justification
+            })
+            print(f" + ADDED RELATION: {source_id} --{relation}--> {target_id}")
+        else:
+            print(f" ! FAILED ADD_RELATION: Source ID {source_id} or Target ID {target_id} not found.")
+
+    def _op_update_relation(self, op, temp_id_map: Optional[Dict[str, str]] = None):
+        source_id = self._resolve_item_reference(op.get("source_id"), temp_id_map)
+        target_id = self._resolve_item_reference(op.get("target_id"), temp_id_map)
+        relation = op.get("relation")
+        justification = op.get("justification", "")
+        allowed_relations = {"SIMILAR", "REFINES", "PREREQUISITE"}
+
+        if not source_id or not target_id:
+            print(" ! FAILED UPDATE_RELATION: source_id and target_id are required.")
+            return
+
+        if source_id == target_id:
+            print(f" ! FAILED UPDATE_RELATION: Self-relations are not allowed for ID {source_id}.")
+            return
+
+        if not isinstance(relation, str):
+            print(f" ! FAILED UPDATE_RELATION: Invalid relation type {relation}.")
+            return
+
+        relation = relation.upper()
+        if relation not in allowed_relations:
+            print(f" ! FAILED UPDATE_RELATION: Unsupported relation type {relation}.")
+            return
+
+        source_item, _ = self._find_item_by_id(source_id)
+        target_item, _ = self._find_item_by_id(target_id)
+
+        if not (source_item and target_item):
+            print(f" ! FAILED UPDATE_RELATION: Source ID {source_id} or Target ID {target_id} not found.")
+            return
+
+        relations = source_item.get("relations", [])
+        for existing in relations:
+            if existing.get("target_id") == target_id:
+                existing["type"] = relation
+                existing["justification"] = justification
+                print(f" ~ UPDATED RELATION: {source_id} --{relation}--> {target_id}")
+                return
+
+        print(f" ! FAILED UPDATE_RELATION: Relation {source_id} -> {target_id} not found.")
 
 # ==========================================
 # Example Usage Flow

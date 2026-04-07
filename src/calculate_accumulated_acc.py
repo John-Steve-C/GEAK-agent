@@ -1,90 +1,202 @@
 import json
+from collections import OrderedDict
+from glob import glob
+
+
+ERROR_TYPES = [
+    "Compile / launch error",
+    "Runtime error",
+    "Wrong answer",
+    "Boundary failure",
+    "Performance fail",
+]
+
+BOUNDARY_KEYWORDS = [
+    "mask",
+    "boundary",
+    "out of bounds",
+    "out-of-bounds",
+    "oob",
+    "non-divisible",
+    "non divisible",
+    "not divisible",
+    "divisible",
+    "shape mismatch",
+    "broadcast",
+    "stride",
+    "misaligned",
+    "tl.load",
+    "tl.store",
+]
+
+WRONG_ANSWER_KEYWORDS = [
+    "generated output does not match reference output",
+    "does not match reference",
+    "allclose",
+    "mismatch",
+    "abs max diff",
+    "reference and generated output results should be of the same type",
+    "generated output is none",
+]
+
 
 def load_json(file_path):
-    with open(file_path, 'r') as f:
-        data = json.load(f)
-    return data
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def load_jsonl(file_path):
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-        data = [json.loads(line) for line in lines]
-    return data
 
-def get_accumulated_acc(data):
-    total = len(data)
-    correct = sum(1 for item in data if item.get("pass_exe", False))
-    return correct / total if total > 0 else 0.0
+def find_iteration_files(root):
+    pattern = f"{root}_*.json"
+    files = []
+    for path in glob(pattern):
+        suffix = path[len(root) + 1 : -5]
+        if suffix.isdigit():
+            files.append((int(suffix), path))
+    return sorted(files)
+
+
+def normalize_text(*parts):
+    merged = "\n".join(str(part) for part in parts if part not in (None, "", "None"))
+    return merged.lower()
+
+
+def classify_error(item):
+    pass_call = bool(item.get("pass_call"))
+    pass_exe = bool(item.get("pass_exe"))
+    pass_perf = bool(item.get("pass_perf"))
+
+    if pass_perf or (pass_exe and pass_perf):
+        return None
+    if pass_exe and not pass_perf:
+        return "Performance fail"
+    if pass_call and pass_exe:
+        return None
+    if not pass_call:
+        return "Compile / launch error"
+
+    error_text = normalize_text(item.get("call_err_msg"), item.get("exe_err_msg"))
+    if any(keyword in error_text for keyword in BOUNDARY_KEYWORDS):
+        return "Boundary failure"
+    if any(keyword in error_text for keyword in WRONG_ANSWER_KEYWORDS):
+        return "Wrong answer"
+    return "Runtime error"
+
+
+def initialize_distribution():
+    return OrderedDict((error_type, 0) for error_type in ERROR_TYPES)
+
+
+def summarize_iteration(data, flag_pass_call, flag_pass_exe, flag_pass_perf, solutions):
+    distribution = initialize_distribution()
+
+    for filename, item in data.items():
+        if item.get("pass_call"):
+            flag_pass_call[filename] = True
+        if item.get("pass_exe"):
+            flag_pass_exe[filename] = True
+        if item.get("pass_perf"):
+            flag_pass_perf[filename] = True
+
+        if item.get("pass_perf") and item.get("perf_candidates"):
+            solutions[filename] = item["perf_candidates"][-1][0]
+        elif item.get("exe_candidate") is not None:
+            solutions[filename] = item["exe_candidate"]
+        elif item.get("call_candidate") is not None:
+            solutions[filename] = item["call_candidate"]
+
+        error_type = classify_error(item)
+        if error_type is not None:
+            distribution[error_type] += 1
+
+    return distribution
+
+
+def format_distribution(distribution, total):
+    lines = []
+    for error_type, count in distribution.items():
+        rate = (count / total) if total else 0.0
+        lines.append(f"  - {error_type}: {count} ({rate:.4f})")
+    return "\n".join(lines)
+
 
 if __name__ == "__main__":
+    root = "../outputs/new/optimagent_gpt41_origin_mem"
 
-    # root = "../outputs/optimagent_gpt41_mini_mem"
-    # root = "../outputs/_embed_optimagent_gpt41_mini_mem"
+    iter_files = find_iteration_files(root)
+    if not iter_files:
+        raise FileNotFoundError(f"No iteration files found for root: {root}")
 
-    # root = "../outputs/test/embed_optimagent_gpt41_mini_mem"
-    # root = "../outputs/test/compare_split_embed_optimagent_gpt41_mini_mem"
-    # root = "../outputs/test/true_embed_optimagent_gpt41_mini_mem"
-    
-    # root = "../outputs/test/optimagent_gpt41_mini_pipeline_dc_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_answer_pipeline_dc_mem"
-    root = "../outputs/test/optimagent_gpt41_mini_origin_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_serial_dc_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_api_init_combined_dc_reorder_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_prune_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_llm_prune_mem"
-    # root = "../outputs/test/optimagent_gpt41_mini_api_append_mem"
-    # root = '../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_mem'
-    root = '../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_all_mem'
+    first_data = load_json(iter_files[0][1])
+    filenames = list(first_data.keys())
 
-    root = "triton_run_langchain_tmp/results_iter"
+    flag_pass_call = OrderedDict((filename, False) for filename in filenames)
+    flag_pass_exe = OrderedDict((filename, False) for filename in filenames)
+    flag_pass_perf = OrderedDict((filename, False) for filename in filenames)
+    solutions = OrderedDict((filename, None) for filename in filenames)
 
-    flag_pass_exe = [0] * 184   # total 184 samples
-    flag_pass_call = [0] * 184
-    solutions = [None] * 184
-    
-    output_results = []
-    accum_acc = []
-    # # load json file
-    # data = load_json('../outputs/optimagent_gpt41_mini_mem_4.json')
-    # print(len(data))
-    # # print the first entry
-    # file_names = data.keys()
-    # # print(data.keys())
-    # print(data["lightning_attention.py"].keys())
+    summaries = []
+    last_data = first_data
 
-    for iter in range(20):
-        file_path = f'{root}_{iter}.json'
+    for iter_num, file_path in iter_files:
         data = load_json(file_path)
+        last_data = data
 
-        for idx, key in enumerate(data):
-            # print(idx, key, data[key])
-            if data[key]['pass_call']:
-                flag_pass_call[idx] = 1
-            if data[key]["pass_exe"] or data[key]["pass_perf"]:
-                flag_pass_exe[idx] = 1
-                if len(data[key]["perf_candidates"]) > 0:
-                    solutions[idx] = data[key]["perf_candidates"][-1][0]
-                elif data[key]["exe_candidate"] is not None:
-                    solutions[idx] = data[key]["exe_candidate"]
-                else:
-                    print(f"Warning: No valid solution for {key} at iter {iter}")
-        # print(cnt)
-        acc = sum(flag_pass_exe) / len(flag_pass_exe)
-        accum_acc.append(acc)
-        print(f"iter {iter}, acc: {acc:.4f}, number pass_exe: {sum(flag_pass_exe)}, number pass_call: {sum(flag_pass_call)}")
-    
-    input("Press Enter to save final results...")
+        for filename in filenames:
+            if filename not in data:
+                raise KeyError(f"Missing filename {filename} in {file_path}")
 
-    with open(f"{root}_final_solutions.jsonl", "w") as f:
-        for idx, key in enumerate(data):
-            output_results.append({
-                "filename": key,
-                "pass_exe": bool(flag_pass_exe[idx]),
-                "solution": solutions[idx]
-            })
-            f.write(json.dumps(output_results[-1]) + "\n")
-    
-    with open(f"{root}_accumulated_acc_2.txt", "w") as f:
-        for iter, acc in enumerate(accum_acc):
-            f.write(f"Iter {iter}: accumulated exe acc: {acc:.4f}\n")
+        distribution = summarize_iteration(
+            data=data,
+            flag_pass_call=flag_pass_call,
+            flag_pass_exe=flag_pass_exe,
+            flag_pass_perf=flag_pass_perf,
+            solutions=solutions,
+        )
+
+        total = len(filenames)
+        accumulated_call_rate = sum(flag_pass_call.values()) / total
+        accumulated_exe_rate = sum(flag_pass_exe.values()) / total
+        accumulated_perf_rate = sum(flag_pass_perf.values()) / total
+
+        summary = {
+            "iter": iter_num,
+            "accumulated_call_rate": accumulated_call_rate,
+            "accumulated_exe_rate": accumulated_exe_rate,
+            "accumulated_perf_rate": accumulated_perf_rate,
+            "distribution": distribution,
+        }
+        summaries.append(summary)
+
+        print(
+            f"iter {iter_num}: "
+            f"accumulated_call_rate={accumulated_call_rate:.4f}, "
+            f"accumulated_exe_rate={accumulated_exe_rate:.4f}, "
+            f"accumulated_perf_rate={accumulated_perf_rate:.4f}"
+        )
+        print(format_distribution(distribution, total))
+
+    with open(f"{root}_final_solutions.jsonl", "w", encoding="utf-8") as f:
+        for filename in filenames:
+            item = last_data[filename]
+            output = {
+                "filename": filename,
+                "pass_call": bool(flag_pass_call[filename]),
+                "pass_exe": bool(flag_pass_exe[filename]),
+                "pass_perf": bool(flag_pass_perf[filename]),
+                "solution": solutions[filename],
+                "error_type": classify_error(item),
+            }
+            f.write(json.dumps(output, ensure_ascii=False) + "\n")
+
+    metrics_path = f"{root}_accumulated_acc_2.txt"
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        for summary in summaries:
+            f.write(
+                f"Iter {summary['iter']}: "
+                f"accumulated_call_rate={summary['accumulated_call_rate']:.4f}, "
+                f"accumulated_exe_rate={summary['accumulated_exe_rate']:.4f}, "
+                f"accumulated_perf_rate={summary['accumulated_perf_rate']:.4f}\n"
+            )
+            f.write("Error distribution:\n")
+            f.write(format_distribution(summary["distribution"], len(filenames)))
+            f.write("\n")

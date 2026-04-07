@@ -70,7 +70,9 @@ class OptimAgent(Reflexion_Oneshot):
             print(f"Loaded cheatsheet data from {dc_path}, stat: {self.cheatsheet_manager.get_stats()}")
         else:
             # load initial cheatsheet data
-            with open('./new_first_cheatsheet.json', 'r') as f:
+            # new_first_cheatsheet.json
+
+            with open('./cheatsheet_delta.json', 'r') as f:
                 cheatsheet_data = json.load(f)
             self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
             print(f"Initialized cheatsheet manager with initial data, stat: {self.cheatsheet_manager.get_stats()}")
@@ -593,7 +595,9 @@ class OptimAgent(Reflexion_Oneshot):
             # text = self.cheatsheet_manager.build_prompt_qa(mem.ps.instruction, mem.raw_code[0])
             # text = self.cheatsheet_manager.build_prompt_reflect(mem.ps.instruction, mem.reflection)
             
-            text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
+            # text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
+            # text = self.cheatsheet_manager.build_prompt_delta(mem.ps.instruction, mem.raw_code[0], mem.reflection)
+            text = self.cheatsheet_manager.build_prompt_relation(mem.ps.instruction, mem.raw_code[0], mem.reflection)
         else:
             current_sheet = self.global_cheatsheet
             if method == "dc_full":
