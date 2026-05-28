@@ -8,10 +8,10 @@ from vllm import LLM, SamplingParams
 from openai import OpenAI
 
 
-class VLLMModel(BaseModel):
+class VLLMModel():
     def __init__(
         self,
-        model_id="/shared/models/hf/Meta-Llama-3-8B",
+        model_id="/shared/models/hf/Meta-Llama-3-8B-Instruct",
         tensor_parallel_size=2,
         dtype="bfloat16",
     ):
@@ -88,16 +88,8 @@ class VLLMModel(BaseModel):
         try:
             response = self.client.chat.completions.create(
                 model=self.model_id,
-                messages=messages,
+                prompt="Hello, how are you?",
                 temperature=temperature,
-                n=1,
-                stream=False,
-                stop=None,
-                max_tokens=max_tokens,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                logit_bias=None,
-                user=None
             )
             if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
                 raise ValueError("No response choices returned from the API.")

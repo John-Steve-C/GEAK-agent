@@ -53,14 +53,14 @@ def curate_knowledge(operations_json: str):
     return f"知识库已更新。{manager.get_stats()}"
 
 @tool
-def read_knowledge(top_k: int = -1):
+def read_knowledge(top_k: int = -1, query: str = ""):
     """
     读取当前 Triton 优化技巧和历史失败尝试。
     top_k 为 -1 时显示全部，正整数则按热度显示前 K 条。
     """
     manager = get_manager()
     # 使用原有的 to_string_for_prompt 格式化输出
-    return manager.to_string_for_prompt(top_k_hot=top_k)
+    return manager.to_string_for_prompt(top_k_hot=top_k, query=query or None)
 
 # --- 3. 配置 Agent ---
 

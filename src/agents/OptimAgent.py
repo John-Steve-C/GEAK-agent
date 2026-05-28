@@ -10,6 +10,13 @@ from loguru import logger
 from tenacity import RetryError
 from threading import Lock
 from memories.CheatsheetManager import CheatsheetManager
+from memories.TreeCheatsheetManager_v3 import TreeCheatsheetManager
+
+# add a baseline controller to fallback to origin geak implementation
+BASELINE_CONTROLLER = False
+VERBOSE_LOGGING = False
+TREE_CHEATSHEET = True
+USE_FIXED_CATEGORIES = False
 
 class OptimAgent(Reflexion_Oneshot):
     def __init__(self, model, dataset, corpus_path, max_perf_debug_num=5, mem_file=None):
@@ -66,15 +73,17 @@ class OptimAgent(Reflexion_Oneshot):
             assert os.path.exists(dc_path), f"expect cheatsheet file at {dc_path}, but not found"
             with open(dc_path, "r") as f:
                 cheatsheet_data = json.load(f)
-            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data) if not TREE_CHEATSHEET else TreeCheatsheetManager(cheatsheet_data, use_fixed_categories=USE_FIXED_CATEGORIES)
             print(f"Loaded cheatsheet data from {dc_path}, stat: {self.cheatsheet_manager.get_stats()}")
         else:
             # load initial cheatsheet data
             # new_first_cheatsheet.json
+            # cheatsheet_delta.json
+            # cheatsheet_relation.json
 
-            with open('./cheatsheet_delta.json', 'r') as f:
+            with open('./new_first_cheatsheet.json', 'r') as f:
                 cheatsheet_data = json.load(f)
-            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data)
+            self.cheatsheet_manager = CheatsheetManager(cheatsheet_data) if not TREE_CHEATSHEET else TreeCheatsheetManager(cheatsheet_data, use_fixed_categories=USE_FIXED_CATEGORIES)
             print(f"Initialized cheatsheet manager with initial data, stat: {self.cheatsheet_manager.get_stats()}")
 
         for ps in self.dataset.problem_states:
@@ -360,46 +369,55 @@ class OptimAgent(Reflexion_Oneshot):
                     mem.ps.solution = mem.raw_code[0]
 
             # update cheatsheet
-            logger.info(f"\ncheatsheet record usage")
-            for mem in self.memories[start_idx:(start_idx + data_len)]:
-                self.cheatsheet_manager.record_usage(mem.thoughts, iter)
-            logger.info(f"\nupdate cheatsheet")
-            with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
-                # if multi_thread:
-                #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
-                #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
-                #         for future in as_completed(futures):
-                #             pbar.update(1)
-                # else:
-                    for mem in self.memories[start_idx:(start_idx + data_len)]:
-                        self.generate_dc(mem, method="json", temperature=temperature)
-                        pbar.update(1)
-            
-            # prune cheatsheet to control length
-            prune_type = "utility-based"
-            # prune_type = "llm-summarization"
-            max_length = 1000000
+            if not BASELINE_CONTROLLER:
+                logger.info(f"\ncheatsheet record usage")
+                for mem in self.memories[start_idx:(start_idx + data_len)]:
+                    if isinstance(self.cheatsheet_manager, CheatsheetManager):
+                        self.cheatsheet_manager.record_usage(
+                            mem.thoughts,
+                            iter,
+                            pass_call=mem.pass_call,
+                            pass_exe=mem.pass_exe,
+                        )
+                    else:
+                        self.cheatsheet_manager.record_usage(mem.thoughts, iter)
+                logger.info(f"\nupdate cheatsheet")
+                with tqdm(total=data_len, desc="Cheatsheet Update") as pbar:
+                    # if multi_thread:
+                    #     with ThreadPoolExecutor(max_workers=thread_num) as executor:
+                    #         futures = {executor.submit(self.generate_dc, mem, method="json", temperature=temperature): mem for mem in self.memories[start_idx:(start_idx + data_len)]}
+                    #         for future in as_completed(futures):
+                    #             pbar.update(1)
+                    # else:
+                        for mem in self.memories[start_idx:(start_idx + data_len)]:
+                            self.generate_dc(mem, method="json", temperature=temperature)
+                            pbar.update(1)
+                
+                # prune cheatsheet to control length
+                prune_type = "utility-based"
+                # prune_type = "llm-summarization"
+                max_length = 1000000
 
-            if prune_type == "utility-based":
-                self.cheatsheet_manager.prune_by_utility(min_usage_ratio=0.5, age_threshold=2)
-            elif self.cheatsheet_manager.to_string_for_prompt().__len__() > max_length:
-                logger.info(f"Cheatsheet length {self.cheatsheet_manager.to_string_for_prompt().__len__()} exceeds max length {max_length}, pruning...")
-                if prune_type == "round-robin":
-                    self.cheatsheet_manager.prune_length(max_length=1000000)
-                elif prune_type == "llm-summarization":
-                    prompt = self.cheatsheet_manager.build_prompt_for_pruning(target_length=1000000)
-                    msg = [
-                        {"role": "user", "content": prompt},
-                    ]
-                    try:
-                        response = self.model.generate(msg, temperature=1.0, max_tokens=10000)
-                        self.cheatsheet_manager.apply_operations(response)
-                        logger.info(f"Cheatsheet pruned via LLM summarization, now stats: {self.cheatsheet_manager.get_stats()}")
-                    except RetryError as e:
-                        logger.error(f"LLM call failed during cheatsheet pruning: {e}. Keeping existing cheatsheet.")
-            # write intermediate results
-            with open(f"{root}_cheatsheet_{iter}.json", "w") as f:
-                json.dump(self.cheatsheet_manager.data, f, indent=4)
+                if prune_type == "utility-based":
+                    self.cheatsheet_manager.prune_by_utility(min_usage_ratio=0.5, age_threshold=2)
+                elif self.cheatsheet_manager.to_string_for_prompt().__len__() > max_length:
+                    logger.info(f"Cheatsheet length {self.cheatsheet_manager.to_string_for_prompt().__len__()} exceeds max length {max_length}, pruning...")
+                    if prune_type == "round-robin":
+                        self.cheatsheet_manager.prune_length(max_length=1000000)
+                    elif prune_type == "llm-summarization":
+                        prompt = self.cheatsheet_manager.build_prompt_for_pruning(target_length=1000000)
+                        msg = [
+                            {"role": "user", "content": prompt},
+                        ]
+                        try:
+                            response = self.model.generate(msg, temperature=1.0, max_tokens=10000)
+                            self.cheatsheet_manager.apply_operations(response)
+                            logger.info(f"Cheatsheet pruned via LLM summarization, now stats: {self.cheatsheet_manager.get_stats()}")
+                        except RetryError as e:
+                            logger.error(f"LLM call failed during cheatsheet pruning: {e}. Keeping existing cheatsheet.")
+                # write intermediate results
+                with open(f"{root}_cheatsheet_{iter}.json", "w") as f:
+                    json.dump(self.cheatsheet_manager.data, f, indent=4)
 
             if output_path is not None:
                 self.dataset.write_file(iter_path, start_idx=start_idx, datalen=data_len)
@@ -425,17 +443,20 @@ class OptimAgent(Reflexion_Oneshot):
 
         tab = "\n"
         fss_text = "".join(f"* {sig}{tab}" for sig in mem.function_signatures)
-        # origin version
-        # text = prompt_for_generation.prompt.format(
-        #     instruction=mem.ps.instruction,
-        #     function_signatures=fss_text
-        # )
-        # combine generation with re-ordered cheatsheet
-        text = prompt_for_generation.prompt_reorder.format(
-            cheatsheet=self.cheatsheet_manager.to_string_for_prompt(top_k_hot=20),  # only use top 20 hot items to generate response
-            instruction=mem.ps.instruction,
-            function_signatures=fss_text
-        )
+
+        if BASELINE_CONTROLLER:
+            # origin version
+            text = prompt_for_generation.prompt.format(
+                instruction=mem.ps.instruction,
+                function_signatures=fss_text
+            )
+        else:
+            # combine generation with re-ordered cheatsheet
+            text = prompt_for_generation.prompt_reorder.format(
+                cheatsheet=self.cheatsheet_manager.to_string_for_prompt(top_k_hot=20),  # only use top 20 hot items to generate response
+                instruction=mem.ps.instruction,
+                function_signatures=fss_text
+            )
 
         # for the one that has perf_candidates, and the code generated in this round pass_exe, we need to generate a new code
         # for the one that has perf_candidates, but the code generated in this round not pass_exe, if the debug_num has exceeds the man_debug_num, then generate a new code
@@ -459,6 +480,7 @@ class OptimAgent(Reflexion_Oneshot):
         else:
             if not mem.raw_code or mem.raw_code[0] == "":
                 text += f"\nHere is an example snippet of code: {mem.oneshot}"
+                # text += ""
             else:
                 one_shot = self.code_retriever.query(mem.raw_code[0])[0]["code"]
                 text += f"\nHere is an example snippet of code: {one_shot}"
@@ -491,16 +513,27 @@ class OptimAgent(Reflexion_Oneshot):
         ]
 
         try:
-            response = self.model.generate(msg, temperature=temperature, max_tokens=15000)
-        except:
-            logger.info(f"failed to call LLM for {mem.ps.filename}")
-            response = {"code": ""}
-            
+            response = self.model.generate(msg, temperature=temperature, max_tokens=10000)
+        except Exception as e:
+            error = e
+            if isinstance(e, RetryError) and e.last_attempt is not None:
+                error = e.last_attempt.exception()
+            logger.info(f"failed to call LLM for {mem.ps.filename}, error: {error}")
+            mem.raw_code = [""]
+            mem.thoughts = ""
+            mem.pass_call = False
+            mem.pass_exe = False
+            mem.pass_perf = False
+            return
+        
+        # print("LLM response: ", response)
+
         try:
-            mem.raw_code = [clear_code(clear_json(response)["code"])]
-            mem.thoughts = clear_json(response)["thought"]
-        except:
-            print(f"failed to extract code for {mem.ps.filename}")
+            parsed_response = clear_json(response)
+            mem.raw_code = [clear_code(parsed_response["code"])]
+            mem.thoughts = parsed_response.get("thought", "")
+        except Exception as e:
+            print(f"failed to extract code for {mem.ps.filename}: {e}")
             # fail_dir = "failed_to_extract"
             # fail_path = os.path.join(fail_dir, mem.ps.filename)
             # os.makedirs(fail_dir, exist_ok=True)
@@ -508,10 +541,38 @@ class OptimAgent(Reflexion_Oneshot):
             # with open(fail_path, "w") as f:
             #     f.write(response)
 
-            raw_code = response.split("\"code\":")[1]
-            raw_code = raw_code.split("}")[0]
-            mem.raw_code = [clear_code(raw_code)]
+            fallback_response = response
+            if isinstance(response, str):
+                fallback_response = response.strip()
+                if fallback_response.startswith("```"):
+                    first_newline = fallback_response.find("\n")
+                    if first_newline != -1:
+                        fallback_response = fallback_response[first_newline + 1:]
+                    if fallback_response.rstrip().endswith("```"):
+                        fallback_response = fallback_response.rstrip()[:-3].strip()
+
+                decoder = json.JSONDecoder()
+                for start, char in enumerate(fallback_response):
+                    if char != "{":
+                        continue
+                    try:
+                        fallback_response, _ = decoder.raw_decode(fallback_response[start:])
+                        break
+                    except json.JSONDecodeError:
+                        continue
+
+            if isinstance(fallback_response, dict):
+                mem.raw_code = [clear_code(fallback_response.get("code", ""))]
+                mem.thoughts = fallback_response.get("thought", "")
+            elif isinstance(response, str) and "\"code\"" in response:
+                raw_code = response.split("\"code\":", 1)[1]
+                raw_code = raw_code.rsplit("}", 1)[0]
+                mem.raw_code = [clear_code(raw_code)]
+            else:
+                mem.raw_code = [""]
         # finally:
+        if VERBOSE_LOGGING:
+            print("Code: \n", mem.raw_code[0])
         
         if mem.raw_code[0] is None or mem.raw_code is None:
             print(f"raw code for {mem.ps.filename} is None")
@@ -558,7 +619,12 @@ class OptimAgent(Reflexion_Oneshot):
                 "content": reflect_txt
             }
         ]
-        mem.reflection = self.model.generate(reflect_msg, temperature=temperature)
+        try:
+            mem.reflection = self.model.generate(reflect_msg, temperature=temperature)
+        except Exception as e:
+            logger.info(f"failed to call LLM for reflection for {mem.ps.filename}, error: {e}")
+            mem.reflection = ""
+            return
 
     # Helper function to extract cheatsheet from response
     def extract_cheatsheet(
@@ -595,9 +661,9 @@ class OptimAgent(Reflexion_Oneshot):
             # text = self.cheatsheet_manager.build_prompt_qa(mem.ps.instruction, mem.raw_code[0])
             # text = self.cheatsheet_manager.build_prompt_reflect(mem.ps.instruction, mem.reflection)
             
-            # text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
+            text = self.cheatsheet_manager.build_prompt(mem.ps.instruction, mem.raw_code[0], mem.reflection)
             # text = self.cheatsheet_manager.build_prompt_delta(mem.ps.instruction, mem.raw_code[0], mem.reflection)
-            text = self.cheatsheet_manager.build_prompt_relation(mem.ps.instruction, mem.raw_code[0], mem.reflection)
+            # text = self.cheatsheet_manager.build_prompt_relation(mem.ps.instruction, mem.raw_code[0], mem.reflection)
         else:
             current_sheet = self.global_cheatsheet
             if method == "dc_full":

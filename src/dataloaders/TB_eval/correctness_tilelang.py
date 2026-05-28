@@ -100,7 +100,7 @@ def test_correctness(ref_file, gen_file, var_name, atol=1e-3, rtol=1e-3, verbose
                 f.write("#" * 146)
         gen_call_acc = True
     except Exception as e:
-        gen_stderr = e
+        gen_stderr = f"Generated module import/call failure: {e}"
         return gen_call_acc, None, None, gen_stderr
 
     try:
@@ -112,7 +112,7 @@ def test_correctness(ref_file, gen_file, var_name, atol=1e-3, rtol=1e-3, verbose
                 f.write("\n\n\n")
                 f.write("#" * 146)
     except Exception as e:
-        return gen_call_acc, None, None, e
+        return gen_call_acc, None, None, f"Reference module import/call failure: {e}"
 
     if gen_result_golden is None:
         return gen_call_acc, False, None, "Generated output is None"
@@ -126,7 +126,7 @@ def test_correctness(ref_file, gen_file, var_name, atol=1e-3, rtol=1e-3, verbose
 
     exec_acc = compare(ref_result_golden, gen_result_golden, fname, atol=atol, rtol=rtol, verbose=verbose)
     if not exec_acc:
-        gen_stderr = f"Generated output does not match reference output for file: {fname}"
+        gen_stderr = f"Output mismatch against Triton reference for file: {fname}"
     return gen_call_acc, exec_acc, None, gen_stderr
 
 

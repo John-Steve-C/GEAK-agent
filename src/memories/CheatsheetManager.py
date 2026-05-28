@@ -4,6 +4,13 @@ from typing import List, Dict, Any, Optional
 import re
 
 class CheatsheetManager:
+    SCORE_WEIGHTS = {
+        "usage": 0.25,
+        "relevance": 0.25,
+        "performance": 0.25,
+        "penalty": 0.25,
+    }
+
     def __init__(self, initial_state: Optional[Dict] = None):
         """
         Initialize the KnowledgeBase (Cheatsheet).
@@ -25,6 +32,7 @@ class CheatsheetManager:
             self.data = initial_state
         else:
             self.data = {section: [] for section in self.sections}
+        self._normalize_data()
 
     def _generate_id(self) -> str:
         """Generates a short, unique 8-char ID for new items."""
@@ -34,13 +42,160 @@ class CheatsheetManager:
         """Returns the cheatsheet as a JSON string (for storage)."""
         return json.dumps(self.data, indent=4)
 
-    def to_string_for_prompt(self, top_k_hot=-1) -> str:
+    def _normalize_data(self):
+        for section in self.sections:
+            items = self.data.get(section)
+            if items is None:
+                self.data[section] = []
+                continue
+            for item in items:
+                self._normalize_item(item)
+
+    def _normalize_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        item.setdefault("usage_count", 0)
+        item.setdefault("last_used_iter", -1)
+        item.setdefault("created_iter", 0)
+        item.setdefault("variations", [])
+        item.setdefault("edge_cases", [])
+        item.setdefault("relations", [])
+        item.setdefault("embedding", [])
+        item.setdefault("performance_gain", 0.0)
+        item.setdefault("conflict_count", 0)
+        return item
+
+    def _clamp_score(self, value: Any) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, numeric))
+
+    def _item_text_for_embedding(self, item: Dict[str, Any]) -> str:
+        parts = [item.get("content", "")]
+        for variation in item.get("variations", []):
+            parts.append(variation.get("content", ""))
+        for edge_case in item.get("edge_cases", []):
+            parts.append(edge_case.get("content", ""))
+        return "\n".join(part for part in parts if part).strip()
+
+    def _get_embedding(self, text: str):
+        from retrievers.retrieve_utils import get_embedding
+
+        return get_embedding(text)
+
+    def _ensure_embedding(self, item: Dict[str, Any]):
+        embedding = item.get("embedding", [])
+        if embedding:
+            return embedding
+
+        text = self._item_text_for_embedding(item)
+        if not text:
+            item["embedding"] = []
+            return item["embedding"]
+
+        item["embedding"] = self._get_embedding(text)
+        return item["embedding"]
+
+    def _cosine_similarity(self, vec_a, vec_b) -> float:
+        if vec_a is None or vec_b is None:
+            return 0.0
+        if len(vec_a) != len(vec_b) or len(vec_a) == 0:
+            return 0.0
+
+        dot_product = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for a, b in zip(vec_a, vec_b):
+            a_value = float(a)
+            b_value = float(b)
+            dot_product += a_value * b_value
+            norm_a += a_value * a_value
+            norm_b += b_value * b_value
+
+        if norm_a <= 0.0 or norm_b <= 0.0:
+            return 0.0
+        return dot_product / ((norm_a ** 0.5) * (norm_b ** 0.5))
+
+    def calculate_usage_score(self, item: Dict[str, Any]) -> float:
+        age = max(1, self.current_iteration - item.get("created_iter", 0))
+        heat = item.get("usage_count", 0) / age
+        return self._clamp_score(heat)
+
+    def calculate_semantic_relevance(self, item: Dict[str, Any], query_embedding=None) -> float:
+        if query_embedding is None:
+            return 0.5
+
+        item_embedding = self._ensure_embedding(item)
+        if not item_embedding:
+            return 0.5
+
+        similarity = self._cosine_similarity(item_embedding, query_embedding)
+        return self._clamp_score((similarity + 1.0) / 2.0)
+
+    def calculate_performance_gain(self, item: Dict[str, Any]) -> float:
+        return self._clamp_score(item.get("performance_gain", 0.0))
+
+    def calculate_penalty(self, item: Dict[str, Any]) -> float:
+        reference_iter = item.get("last_used_iter", -1)
+        if reference_iter < 0:
+            reference_iter = item.get("created_iter", 0)
+
+        staleness_penalty = self._clamp_score(max(0, self.current_iteration - reference_iter) / 10.0)
+        conflict_penalty = self._clamp_score(item.get("conflict_count", 0) / 3.0)
+        penalty = 0.7 * staleness_penalty + 0.3 * conflict_penalty
+        return self._clamp_score(penalty)
+
+    def calculate_combined_score(
+        self,
+        item: Dict[str, Any],
+        query: Optional[str] = None,
+        query_embedding=None,
+    ) -> float:
+        self._normalize_item(item)
+        if query and query_embedding is None:
+            query_embedding = self._get_embedding(query)
+
+        usage_score = self.calculate_usage_score(item)
+        relevance_score = self.calculate_semantic_relevance(item, query_embedding=query_embedding)
+        performance_score = self.calculate_performance_gain(item)
+        penalty = self.calculate_penalty(item)
+
+        score = (
+            self.SCORE_WEIGHTS["usage"] * usage_score
+            + self.SCORE_WEIGHTS["relevance"] * relevance_score
+            + self.SCORE_WEIGHTS["performance"] * performance_score
+            + self.SCORE_WEIGHTS["penalty"] * (1.0 - penalty)
+        )
+        return self._clamp_score(score)
+
+    def _score_item(self, item: Dict[str, Any], query: Optional[str] = None, query_embedding=None) -> Dict[str, float]:
+        self._normalize_item(item)
+        usage_score = self.calculate_usage_score(item)
+        relevance_score = self.calculate_semantic_relevance(item, query_embedding=query_embedding)
+        performance_score = self.calculate_performance_gain(item)
+        penalty = self.calculate_penalty(item)
+        combined_score = (
+            self.SCORE_WEIGHTS["usage"] * usage_score
+            + self.SCORE_WEIGHTS["relevance"] * relevance_score
+            + self.SCORE_WEIGHTS["performance"] * performance_score
+            + self.SCORE_WEIGHTS["penalty"] * (1.0 - penalty)
+        )
+        return {
+            "usage": usage_score,
+            "relevance": relevance_score,
+            "performance": performance_score,
+            "penalty": penalty,
+            "combined": self._clamp_score(combined_score),
+        }
+
+    def to_string_for_prompt(self, top_k_hot=-1, query: Optional[str] = None) -> str:
         """
         Formats the cheatsheet for the LLM prompt.
         Crucially, this MUST include IDs so the LLM can reference them 
         in UPDATE/VARIATION/EXPAND operations.
         """
         output = []
+        query_embedding = self._get_embedding(query) if top_k_hot != -1 and query else None
         for section in self.sections:
             output.append(f"=== {section.upper().replace('_', ' ')} ===")
             items = self.data.get(section, [])
@@ -51,8 +206,12 @@ class CheatsheetManager:
                 # updating mode, show all items
                 recent_items = items
             else:
-                # inference mode, only show top_k_hot by usage_count
-                sorted_items = sorted(items, key=lambda x: x.get('usage_count', 0), reverse=True)
+                # inference mode, only show top_k_hot by combined score
+                sorted_items = sorted(
+                    items,
+                    key=lambda x: self.calculate_combined_score(x, query=query, query_embedding=query_embedding),
+                    reverse=True,
+                )
                 recent_items = sorted_items[:top_k_hot]
 
             for item in recent_items:
@@ -1119,13 +1278,14 @@ Output ONLY a valid JSON object with:
                     if self.to_string_for_prompt().__len__() <= max_length:
                         break
     
-    def prune_by_utility(self, min_usage_ratio: float = 0.5, age_threshold: int = 2):
+    def prune_by_utility(self, min_usage_ratio: float = 0.5, age_threshold: int = 2, query: Optional[str] = None):
         """
         根据使用率清理 Cheatsheet。
         :param min_usage_ratio: 最小使用率（usage_count / 存在轮数）
         :param age_threshold: 冷却期。新创建的条目在 N 轮内不会被清理。
         """
         print(f"\n--- Starting Utility Pruning (Iter {self.current_iteration}) ---")
+        query_embedding = self._get_embedding(query) if query else None
         
         for section in self.sections:
             # if section == "meta_reasoning": continue # 元规则通常保留
@@ -1141,13 +1301,18 @@ Output ONLY a valid JSON object with:
                     keep_items.append(item)
                     continue
                 
-                # 计算“热度”：平均每轮被使用的次数
-                heat = item['usage_count'] / age
-                
-                if heat >= min_usage_ratio:
+                score_parts = self._score_item(item, query=query, query_embedding=query_embedding)
+                combined_score = score_parts["combined"]
+
+                if combined_score >= min_usage_ratio:
                     keep_items.append(item)
                 else:
-                    print(f" - Pruned cold item {item['id']} (Heat: {heat:.2f})")
+                    print(
+                        f" - Pruned cold item {item['id']} "
+                        f"(Score: {combined_score:.2f} | Usage: {score_parts['usage']:.2f} | "
+                        f"Relevance: {score_parts['relevance']:.2f} | Performance: {score_parts['performance']:.2f} | "
+                        f"Penalty: {score_parts['penalty']:.2f})"
+                    )
             
             self.data[section] = keep_items
             print(f"Section {section}: {len(original_items)} -> {len(keep_items)} items after pruning.")
@@ -1203,11 +1368,7 @@ RESPONSE FORMAT (JSON ONLY):
                     return item, self.data[section]
         return None, None
 
-    def record_usage(self, model_thought: str, current_iter: int):
-        """
-        解析格式如 [ID1, ID2, ID3] 的引用列表并更新热度。
-        """
-        self.current_iteration = current_iter
+    def _extract_referenced_ids(self, model_thought):
         unique_ids_in_this_run = set()
 
         if isinstance(model_thought, str):
@@ -1216,7 +1377,7 @@ RESPONSE FORMAT (JSON ONLY):
             for content in bracket_matches:
                 # 按逗号分割内容
                 potential_ids = [item.strip() for item in content.split(",")]
-                
+
                 for pid in potential_ids:
                     # 验证是否为 8 位 16 进制 ID 格式，防止误触普通文字
                     if re.fullmatch(r"[a-f0-9]{8}", pid):
@@ -1227,7 +1388,26 @@ RESPONSE FORMAT (JSON ONLY):
                     unique_ids_in_this_run.add(pid)
         else:
             print("Warning: model_thought is neither str nor list, neglecting usage recording.")
+            return None
+
+        return unique_ids_in_this_run
+
+    def _observed_performance_gain(self, pass_call: bool = False, pass_exe: bool = False):
+        if pass_exe:
+            return 1.0
+        if pass_call:
+            return 0.1
+        return None
+
+    def record_usage(self, model_thought: str, current_iter: int, pass_call: bool = False, pass_exe: bool = False):
+        """
+        解析格式如 [ID1, ID2, ID3] 的引用列表并更新热度。
+        """
+        self.current_iteration = current_iter
+        unique_ids_in_this_run = self._extract_referenced_ids(model_thought)
+        if unique_ids_in_this_run is None:
             return
+        observed_gain = self._observed_performance_gain(pass_call=pass_call, pass_exe=pass_exe)
 
         # 更新命中条目的统计数据
         for target_id in unique_ids_in_this_run:
@@ -1235,6 +1415,11 @@ RESPONSE FORMAT (JSON ONLY):
             if item:
                 item['usage_count'] += 1
                 item['last_used_iter'] = self.current_iteration
+                if observed_gain is not None:
+                    item["performance_gain"] = max(
+                        self.calculate_performance_gain(item),
+                        observed_gain,
+                    )
                 # print(f" >>> [Memory Hit] ID: {target_id} | New Count: {item['usage_count']}")
         
     def apply_operations(self, llm_response: str):
@@ -1322,9 +1507,13 @@ RESPONSE FORMAT (JSON ONLY):
             "usage_count": 0,
             "last_used_iter": -1,      
             "created_iter": self.current_iteration, # when this item was created
-            "variations": [],          
-            "edge_cases": []           
+            "variations": [],
+            "edge_cases": [],
+            "embedding": op.get("embedding", []),
+            "performance_gain": op.get("performance_gain", 0.0),
+            "conflict_count": op.get("conflict_count", 0),
         }
+        self._normalize_item(new_item)
         self.data[section].append(new_item)
         if temp_id_map is not None and ref_id:
             temp_id_map[ref_id] = new_item["id"]
@@ -1338,6 +1527,13 @@ RESPONSE FORMAT (JSON ONLY):
         if item:
             old_content = item['content']
             item['content'] = content
+            if "embedding" in op:
+                item["embedding"] = op.get("embedding", [])
+            if "performance_gain" in op:
+                item["performance_gain"] = op.get("performance_gain", item.get("performance_gain", 0.0))
+            if "conflict_count" in op:
+                item["conflict_count"] = op.get("conflict_count", item.get("conflict_count", 0))
+            self._normalize_item(item)
             print(f" ~ UPDATED {target_id}: {old_content[:30]}... -> {content[:30]}...")
         else:
             print(f" ! FAILED UPDATE: ID {target_id} not found.")

@@ -1,6 +1,7 @@
 import re
 import json
 import ast
+import codecs
 
 def extract_function_signatures(code, mode='triton'):
     function_defs = []
@@ -21,11 +22,32 @@ def extract_function_signatures(code, mode='triton'):
     # print("Extracted function signatures:", function_defs)
     return function_defs
 
+def _strip_wrapped_code_string(code):
+    stripped = code.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ("'", '"'):
+        try:
+            parsed = ast.literal_eval(stripped)
+            if isinstance(parsed, str):
+                return parsed
+        except (SyntaxError, ValueError):
+            unwrapped = stripped[1:-1]
+            try:
+                return codecs.decode(unwrapped, "unicode_escape")
+            except UnicodeDecodeError:
+                return unwrapped.replace("\\n", "\n").replace("\\t", "\t")
+    return code
+
 def clear_code(code):
+    # if code is None:
+    #     return ""
+    # if type(code) is not str:
+    #     code = str(code)
+    # code = _strip_wrapped_code_string(code.strip())
     if  "```python" in code:
         code = code.split("```python")[-1].replace("<|im_end|>", "").replace("<|EOT|>", "")
     if "```" in code:
         code = code.split("```")[0]
+    # code = _strip_wrapped_code_string(code.strip())
     return code
 
 def extract_function_calls(code):

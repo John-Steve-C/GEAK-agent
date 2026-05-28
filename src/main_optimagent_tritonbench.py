@@ -14,6 +14,13 @@ def main():
     model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
     # model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"), model_id=args.model_id)
 
+    # message = [
+    #     {"role": "system", "content": "You are a helpful and precise assistant for optimizing the performance of Triton kernels."},
+    #     {"role": "user", "content": "What is 1+1?"},
+    # ]
+    # response = model.generate(message)
+    # print("LLM response:", response)
+
     # setup dataset
     dataset = TritonBench(statis_path=args.statis_path, 
                           py_folder=args.py_folder, 
@@ -31,7 +38,7 @@ def main():
     # run the agent
     agent.run(output_path=args.output_path, 
               multi_thread=args.multi_thread,
-            #   thread_num=args.thread_num,
+              # thread_num=args.thread_num,
               iteration_num=args.max_iteration, 
               temperature=args.temperature, 
               datalen=args.datalen,

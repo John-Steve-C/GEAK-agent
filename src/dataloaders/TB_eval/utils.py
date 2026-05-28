@@ -6,7 +6,6 @@ from tqdm import tqdm
 from shutil import copyfile
 import datetime
 import json
-from parse_llm_code import extract_code_blocks
 import numpy as np
 
 ## Implementation from https://arxiv.org/pdf/2107.03374
@@ -147,6 +146,7 @@ def extract_code_from_llm_output(response):
     code = None
     if "```" not in response:
         return response
+    from parse_llm_code import extract_code_blocks
     code_blocks = extract_code_blocks(response)
     for _code in code_blocks.code_dict_list:
         code += _code['context'] + "\n"
@@ -293,6 +293,12 @@ def code_call_exec_success_allclose_tilelang(code, fname, py_folder, temp_root="
 
         if (not call_status) and _is_missing_tilelang_error(result_call.stderr):
             err_msg = "TileLang runtime is unavailable in this environment; skipping TileLang execution."
+            if verbose:
+                print(f"File: {fname}, {err_msg}")
+            return False, None, result_call.stdout, err_msg, None, None
+
+        if not call_status:
+            err_msg = f"Generated TileLang module import/call failure: {result_call.stderr}"
             if verbose:
                 print(f"File: {fname}, {err_msg}")
             return False, None, result_call.stdout, err_msg, None, None

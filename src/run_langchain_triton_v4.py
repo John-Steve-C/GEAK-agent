@@ -465,6 +465,8 @@ if __name__ == "__main__":
         model_name='gpt-4.1-mini'
     )
 
+    model_name = ""
+
     start_idx = 0
     length = -1      # -1 means for all
     epoch = 10

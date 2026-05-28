@@ -115,10 +115,10 @@ def create_triton_tools(dataset):
         return f"知识库已更新：{manager.get_stats()}"
 
     @tool
-    def read_cheatsheet(top_k: int = 20):
+    def read_cheatsheet(top_k: int = 20, query: str = ""):
         """[MEMORY] 读取知识库中最高热度的 20 条优化建议。"""
         manager = get_manager()
-        return manager.to_string_for_prompt(top_k_hot=top_k)
+        return manager.to_string_for_prompt(top_k_hot=top_k, query=query or None)
 
     return [run_test_and_get_perf, curate_cheatsheet, read_cheatsheet]
 
@@ -376,4 +376,3 @@ if __name__ == "__main__":
         print(f"Epoch {iter} - Accuracy: {acc:.4f}")
 
         dict_to_save.clear()  # 清空列表以准备下一轮迭代
-

@@ -62,14 +62,19 @@ class TilelangBench:
                         file = "context_attn_nopad.py"
                 path = os.path.join(self.py_folder, file)
                 assert os.path.exists(path), f"{file} not exist!"
-                test_code = open(path, "r", encoding="utf-8").read()
-                # assert "def test_" in  test_code, ""
+                full_code = open(path, "r", encoding="utf-8").read()
+                hash_line = "#" * 146
+                if hash_line in full_code:
+                    reference_code, test_code = full_code.split(hash_line, 1)
+                else:
+                    reference_code, test_code = full_code, ""
 
                 problemstate = ProblemState(instruction=instruction,
-                                            label=label, 
+                                            label=reference_code.strip(), 
                                             test_code=test_code, 
                                             filename=file, 
                                             )
+                problemstate.reference_code = reference_code.strip()
                 
                 problem_states.append(
                     problemstate

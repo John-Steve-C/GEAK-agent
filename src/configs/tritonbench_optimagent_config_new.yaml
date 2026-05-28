@@ -2,6 +2,8 @@
 # api_key: ${oc.env:OPENAI_API_KEY}   # need hydra support
 # model_id: "dvue-aoai-001-gpt-4.1"
 model_id: "gpt-4.1-mini"
+# model_id: "gemini-2.5-flash"
+# model_id: "google/gemini-2.5-flash"
 # model_id: "qwen/qwen3-coder:free"
 temperature: 1.0
 
@@ -39,7 +41,27 @@ target_kernels: null
 # output_path: "../outputs/full/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_continue.jsonl"
 # output_path: "../outputs/test/optimagent_gpt41_mini_init_combined_dc_reorder_utility_prune_all.jsonl"
 
-output_path: "../outputs/new/optimagent_gpt41_mini_reason.jsonl"
+# output_path: "../outputs/new/optimagent_gpt41_mini_reason.jsonl"
+# output_path: "../outputs/new/optimagent_gpt41_mini_dc_only.jsonl"
+
+# output_path: "../outputs/new/optimagent_gemini25_flash_dc.jsonl"
+# output_path: "../outputs/new/optimagent_gemini25_flash_origin.jsonl"
+output_path: "../outputs/new/optimagent_gemini25_flash_tree_dc.jsonl"
+
+
+# output_path: "../outputs/new_v2/optimagent_gpt41_mini_dc.jsonl"
+# output_path: "../outputs/new_v2/optimagent_gpt4o_mini_origin.jsonl"
+
+# output_path: "../outputs/new_v2/optimagent_gpt41_mini_new_score_dc.jsonl" # baseline
+# output_path: "../outputs/new_v2/optimagent_gpt41_mini_real_new_score_dc.jsonl"  # combine score
+# output_path: "../outputs/new_v2/optimagent_gpt41_mini_tree_dc.jsonl"  # tree + combine score
+# output_path: "../outputs/new_v2/optimagent_gpt41_mini_new_performance_score_dc.jsonl"  # combine score
+output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_dc.jsonl"  # average weighted score
+output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_tree_dc.jsonl"  # average weighted score tree dc
+output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_dynamic_tree_dc.jsonl"  # average weighted score tree dc + dynamic category
+
+
+
 
 max_iteration: 10
 multi_thread: true

@@ -2,7 +2,9 @@
 
 import os
 import json
+import shutil
 import threading
+from collections import OrderedDict
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
@@ -13,10 +15,11 @@ from langchain_community.callbacks import get_openai_callback
 
 # 严格按要求 import，不修改 Manager 源码
 from memories.CheatsheetManager import CheatsheetManager
-from dataloaders.TritonBench import TritonBench
+from dataloaders.TilelangBench import TilelangBench
 from dataloaders.tilelang.prompt import template_prompt, template_with_cheatsheet
 from utils.utils import extract_function_signatures, clear_code, clear_json
 
+import tilelang
 
 def fix_tilelang_prim_func_indent(code: str) -> str:
     lines = code.splitlines()
@@ -39,6 +42,120 @@ def fix_tilelang_prim_func_indent(code: str) -> str:
 DEFAULT_PATH = "tilelang_first_cheatsheet.json"
 OUTPUT_DIR = "../outputs/tilelang_langchain_v4_dc"
 CHEATSHEET_PATH = f"{OUTPUT_DIR}/cheatsheet"
+ERROR_TYPES = [
+    "Compile / launch error",
+    "Runtime error",
+    "Wrong answer",
+    "Boundary failure",
+    "Performance fail",
+]
+BOUNDARY_KEYWORDS = [
+    "mask",
+    "boundary",
+    "out of bounds",
+    "out-of-bounds",
+    "oob",
+    "non-divisible",
+    "non divisible",
+    "not divisible",
+    "divisible",
+    "shape mismatch",
+    "broadcast",
+    "stride",
+    "misaligned",
+    "tilelang",
+]
+WRONG_ANSWER_KEYWORDS = [
+    "generated output does not match reference output",
+    "output mismatch against triton reference",
+    "does not match reference",
+    "allclose",
+    "mismatch",
+    "abs max diff",
+    "reference and generated output results should be of the same type",
+    "generated output is none",
+]
+PERF_EVAL_LOCK = threading.Lock()
+
+
+def normalize_error_text(*parts) -> str:
+    merged = "\n".join(str(part) for part in parts if part not in (None, "", "None"))
+    return merged.lower()
+
+
+def classify_result(result: dict) -> Optional[str]:
+    pass_call = bool(result.get("pass_call"))
+    pass_exe = bool(result.get("pass_exe"))
+    pass_perf = bool(result.get("pass_perf"))
+
+    if pass_exe and not pass_perf:
+        return "Performance fail"
+    if pass_perf or (pass_call and pass_exe):
+        return None
+    if not pass_call:
+        return "Compile / launch error"
+
+    error_text = normalize_error_text(result.get("call_error"), result.get("exec_error"))
+    if any(keyword in error_text for keyword in BOUNDARY_KEYWORDS):
+        return "Boundary failure"
+    if any(keyword in error_text for keyword in WRONG_ANSWER_KEYWORDS):
+        return "Wrong answer"
+    return "Runtime error"
+
+
+def init_error_distribution():
+    return OrderedDict((error_type, 0) for error_type in ERROR_TYPES)
+
+
+def collect_error_distribution(results):
+    distribution = init_error_distribution()
+    for item in results:
+        error_type = item.get("error_type")
+        if error_type in distribution:
+            distribution[error_type] += 1
+    return distribution
+
+
+def evaluate_perf_outside(dataset, code: str, filename: str):
+    safe_name = filename.replace(".py", "")
+    exe_dir = f"{OUTPUT_DIR}/perf_exec/{safe_name}"
+    perf_result_dir = f"{OUTPUT_DIR}/perf_results/{safe_name}"
+    perf_script_dir = f"{OUTPUT_DIR}/tmp/perf_gen/{safe_name}"
+    perf_log_dir = f"{OUTPUT_DIR}/perf_logs/{safe_name}"
+
+    os.makedirs(exe_dir, exist_ok=True)
+    with open(os.path.join(exe_dir, filename), "w", encoding="utf-8") as f:
+        f.write(code)
+
+    perf_file_name = f"{filename[:-3]}_perf.py"
+
+    try:
+        with PERF_EVAL_LOCK:
+            dataset.write_perf_file_single(
+                input_folder_path=exe_dir,
+                results_path=perf_result_dir,
+                tmp_dir=perf_script_dir,
+                filename=filename,
+            )
+            dataset.run_perf_script_single(
+                script_dir=perf_script_dir,
+                log_dir=perf_log_dir,
+                gpu_id=0,
+                script_name=perf_file_name,
+            )
+
+        path_gen = os.path.join(perf_result_dir, f"{filename[:-3]}.json")
+        if not os.path.exists(path_gen):
+            return False, None, None, f"Performance result not found: {path_gen}"
+
+        _, efficiency, ms = dataset.calculate(path_gen, path_ref=None)
+        return True, ms, efficiency, None
+    except Exception as e:
+        return False, None, None, str(e)
+    finally:
+        for path in [exe_dir, perf_result_dir, perf_script_dir, perf_log_dir]:
+            if os.path.exists(path):
+                shutil.rmtree(path, ignore_errors=True)
 
 class ThreadSafeCheatsheetManager:
     """包装原始的 CheatsheetManager，添加线程锁以支持并发操作"""
@@ -96,7 +213,6 @@ def run_test_outside(dataset, code: str, filename: str) -> str:
             filename, 
             tmp_dir=tmp_dir, 
             exe_dir=exe_dir,
-            backend="tilelang",
         )
         
         result = {
@@ -144,8 +260,8 @@ def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
         """[MEMORY] 读取知识库中最高热度的 20 条优化建议。"""
         return safe_manager.to_string_for_prompt(top_k_hot=top_k)
 
-    return [run_test_and_get_perf, curate_cheatsheet, read_cheatsheet]
-    # return [run_test_and_get_perf]
+    # return [run_test_and_get_perf, curate_cheatsheet, read_cheatsheet]
+    return [run_test_and_get_perf]
 
 # --- 3. 核心 Workflow 类 ---
 
@@ -156,8 +272,8 @@ class TritonLangChainWorkflow:
         self.llm = ChatOpenAI(model=model_name, temperature=1.0)
         self.tools = create_triton_tools(dataset, manager)
         
-        # self.system_prompt = template_prompt
-        self.system_prompt = template_with_cheatsheet
+        self.system_prompt = template_prompt
+        # self.system_prompt = template_with_cheatsheet
 
         self.agent = create_agent(
             model=self.llm,
@@ -165,9 +281,10 @@ class TritonLangChainWorkflow:
             system_prompt=self.system_prompt
         )
 
-    def run_sample(self, instruction: str, filename: str, function_signature: str, iter: int) -> dict:
+    def run_sample(self, instruction: str, filename: str, function_signature: list[str], iter: int) -> dict:
         """处理单个样本并返回结果字典，不操作全局变量"""
         print(f"\n[Processing]: {filename}")
+        signature_text = "\n".join(f"- {sig}" for sig in function_signature) if function_signature else "- No explicit public signature found"
         
         result_dict = {
             "filename": filename,
@@ -175,8 +292,12 @@ class TritonLangChainWorkflow:
             "response": "",
             "pass_exe": False,
             "pass_call": False,
+            "pass_perf": False,
             "call_error": None,
             "exec_error": None,
+            "ms": None,
+            "efficiency": None,
+            "error_type": None,
             "token_usage": 0,
             "money_cost": None,
         }
@@ -189,26 +310,19 @@ class TritonLangChainWorkflow:
                     {"messages": [{
                         "role": "user", 
                         "content": f"""
-**Request:**
-You are a expert in writing tilelang operators for efficient GPU programming. Use tilelang language write a kernel and wrapper according following instruction.
+**Task Instruction:**
 {instruction}
 
-**CRITICAL FUNCTION INFORMATION:**
-{function_signature}
+**Required Public API Signatures:**
+{signature_text}
 
-You MUST start from the following template and then fill in the kernel body.
-Template:
-```python
-@tl.jit
-def function_signature(...):
+Implement the operator in TileLang.
+Preserve only the required public API above. Those are the tested wrapper entrypoints.
+You may choose different private helper names and different low-level kernel argument shapes internally.
+Do not reproduce Triton internal kernel signatures unless you need your own private helpers.
+The public wrapper must allocate outputs / derive launch parameters / build the TileLang kernel / invoke the compiled TileLang kernel directly.
+Do not use Triton launch syntax like `kernel[(grid,)](...)`.
 
-    @T.prim_func
-    def main(...):      # Remember to keep the same indent as @T.prim_func
-
-        # kernel body
-
-    return main
-```
 **Filename:**
 {filename}
 """
@@ -253,7 +367,23 @@ def function_signature(...):
                                 result_dict["exec_error"] = tool_result.get("exec_error")
                                 
                                 status = "✅ 成功" if tool_result['pass_exe'] else "❌ 失败"
-                                print(f"{status} [{filename}]: pass_call={tool_result['pass_call']}")
+                                print(f"{status} [{filename}]: pass_call={tool_result['pass_call']}, pass_exe={tool_result['pass_exe']}")
+                                if not tool_result['pass_call']:
+                                    print(f"  Call error: {tool_result.get('call_error')}")
+                                elif not tool_result['pass_exe']:
+                                    print(f"  Exec error: {tool_result.get('exec_error')}")
+
+                                if result_dict["pass_exe"]:
+                                    pass_perf, ms, efficiency, perf_error = evaluate_perf_outside(
+                                        self.dataset,
+                                        code,
+                                        filename,
+                                    )
+                                    result_dict["pass_perf"] = pass_perf
+                                    result_dict["ms"] = ms
+                                    result_dict["efficiency"] = efficiency
+                                    if perf_error is not None:
+                                        result_dict["exec_error"] = perf_error
 
                             # 记录 Manager 统计
                             self.manager.record_usage(model_thought=final_response, current_iter=iter)
@@ -264,19 +394,37 @@ def function_signature(...):
             print(f"📊 [{filename}] Token: {cb.total_tokens} | 成本: ${cb.total_cost:.4f}")
             result_dict["token_usage"] = cb.total_tokens
             result_dict["money_cost"] = cb.total_cost
+            result_dict["error_type"] = classify_result(result_dict)
             
         return result_dict
 
 # --- 4. 启动示例 ---
 
 if __name__ == "__main__":
-    dataset = TritonBench(statis_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/renaming_instruction.json",
-                          py_folder="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1", 
-                          instruction_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/renaming_instruction.json", 
-                          py_interpreter="python", 
-                          golden_metrics="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics",
-                          perf_G_path="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G",
-                          )
+    canary_targets = [
+        "add_example.py",
+        "masked_select.py",
+        "lightning_attention.py",
+    ]
+    target_kernels_env = os.environ.get("TILELANG_TARGET_KERNELS")
+    if target_kernels_env:
+        target_kernels = [item.strip() for item in target_kernels_env.split(",") if item.strip()]
+    elif os.environ.get("TILELANG_CANARY") == "1":
+        target_kernels = canary_targets
+    else:
+        target_kernels = None
+
+    # "/home/wentao/GEAK-agent/src/dataloaders/tilelang/renaming_instruction.json"
+    # "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
+    # "/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json"
+    dataset = TilelangBench(statis_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json",
+                            py_folder="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1", 
+                            instruction_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json", 
+                            py_interpreter="python", 
+                            golden_metrics="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics",
+                            perf_G_path="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G",
+                            target_kernels=target_kernels,
+                            )
     
     workflow = TritonLangChainWorkflow(
         dataset=dataset,
@@ -285,14 +433,17 @@ if __name__ == "__main__":
     )
 
     start_idx = 0
-    length = -1      # -1 means for all
-    epoch = 5
+    length = 50      # -1 means for all
+    epoch = 1
     max_workers = 64 # 【关键】设置多线程并发数
 
-    # Move accumulated accuracy calculation into the main epoch loop
-    flag = [0] * (length if (length > 0) else 184)
+    tasks = dataset.problem_states[start_idx : start_idx + length if length > 0 else None]
+    filenames = [ps.filename for ps in tasks]
+    flag_pass_call = OrderedDict((filename, False) for filename in filenames)
+    flag_pass_exe = OrderedDict((filename, False) for filename in filenames)
+    flag_pass_perf = OrderedDict((filename, False) for filename in filenames)
+
     for iter_num in range(epoch):
-        tasks = dataset.problem_states[start_idx : start_idx + length if length > 0 else None]
         epoch_results = []
         
         print(f"\n========== 开始 Epoch {iter_num} ==========")
@@ -305,7 +456,7 @@ if __name__ == "__main__":
                     workflow.run_sample, 
                     ps.instruction, 
                     ps.filename, 
-                    extract_function_signatures(ps.label, mode='tilelang'), 
+                    extract_function_signatures(ps.label, mode='tilelang', test_code=ps.test_code), 
                     iter_num
                 ): ps.filename for ps in tasks
             }
@@ -327,17 +478,52 @@ if __name__ == "__main__":
         with open(f"{OUTPUT_DIR}/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
             json.dump(epoch_results, f, ensure_ascii=False, indent=4)
         
-        # 统计正确率
+        total = len(filenames)
+        if total == 0:
+            continue
+
+        results_by_filename = {item["filename"]: item for item in epoch_results}
+        for filename in filenames:
+            item = results_by_filename.get(filename)
+            if item is None:
+                continue
+            if item.get("pass_call"):
+                flag_pass_call[filename] = True
+            if item.get("pass_exe"):
+                flag_pass_exe[filename] = True
+            if item.get("pass_perf"):
+                flag_pass_perf[filename] = True
+
+        call_rate = sum(1 for item in epoch_results if item.get("pass_call")) / total
+        exe_rate = sum(1 for item in epoch_results if item.get("pass_exe")) / total
+        perf_rate = sum(1 for item in epoch_results if item.get("pass_perf")) / total
+        accumulated_call_rate = sum(flag_pass_call.values()) / total
+        accumulated_exe_rate = sum(flag_pass_exe.values()) / total
+        accumulated_perf_rate = sum(flag_pass_perf.values()) / total
+        error_distribution = collect_error_distribution(epoch_results)
+
         if epoch_results:
-            acc = sum(1 for item in epoch_results if item.get("pass_exe")) / len(epoch_results)
-            print(f"\n🏆 Epoch {iter_num} - Accuracy: {acc:.4f} \n")
-        
-        # 累计正确率统计
-        for idx, item in enumerate(epoch_results):
-            if item.get('pass_exe'):
-                flag[idx] = 1
-        accumulated_acc = sum(flag) / len(epoch_results)    # total number is 184
-        print(f"Epoch {iter_num}, accumulated acc = {accumulated_acc}")
-        # save result to the file
+            print(
+                f"\n🏆 Epoch {iter_num} - "
+                f"call_rate={call_rate:.4f}, exe_rate={exe_rate:.4f}, perf_rate={perf_rate:.4f}\n"
+            )
+            print(
+                f"Epoch {iter_num}, accumulated call_rate = {accumulated_call_rate:.4f}, "
+                f"accumulated exe_rate = {accumulated_exe_rate:.4f}, "
+                f"accumulated perf_rate = {accumulated_perf_rate:.4f}"
+            )
+            for error_type, count in error_distribution.items():
+                print(f"  {error_type}: {count} ({count / total:.4f})")
+
         with open(f"{OUTPUT_DIR}/accumulated_acc.txt", "a", encoding="utf-8") as f:
-            print(f"Epoch {iter_num}, accumulated acc = {accumulated_acc}", file=f)
+            print(
+                f"Epoch {iter_num}: "
+                f"call_rate={call_rate:.4f}, exe_rate={exe_rate:.4f}, perf_rate={perf_rate:.4f}, "
+                f"accumulated_call_rate={accumulated_call_rate:.4f}, "
+                f"accumulated_exe_rate={accumulated_exe_rate:.4f}, "
+                f"accumulated_perf_rate={accumulated_perf_rate:.4f}",
+                file=f,
+            )
+            print("Error distribution:", file=f)
+            for error_type, count in error_distribution.items():
+                print(f"  - {error_type}: {count} ({count / total:.4f})", file=f)

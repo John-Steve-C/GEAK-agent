@@ -94,6 +94,25 @@ The following instruction was originally designed for Triton kernels.
 Rewrite it following the rules above.
 """
 
+system_prompt_tilelang = """
+You are a technical writer specializing in GPU Domain Specific Languages (DSLs). Your task is to translate a prompt/instruction meant for AMD Triton into a prompt/instruction meant for TileLang (TL).
+
+Please rewrite the provided instruction so that it describes a TileLang implementation while maintaining the original functional logic, class names, and kernel interfaces.
+
+## Strict Constraints
+
+1. Preserve Interface Integrity: Maintain exact parity with the original Triton signature. All outer wrapper function names, class names, and input/output tensor names must remain identical.
+
+2. Metaprogramming & Constants: Remove all Triton-specific decorators and attributes (e.g., @triton.jit, tl.constexpr). Pass compile-time constants (like block sizes) as standard Python arguments to the outer @tl.jit function, which will be captured naturally by the inner @T.prim_func.
+
+3. Buffer Indexing vs. Pointer Arithmetic: Completely eliminate Triton's flat pointer arithmetic (ptr + offsets) and boolean mask arrays. Replace them with TileLang’s structured N-dimensional buffer indexing (T.Buffer), relying on calculated grid/block coordinates (e.g., Buffer[global_i, global_j]).
+
+4. Memory Movement (T.copy vs Assignment): - Use T.alloc_buffer(..., scope="shared") for intermediate shared memory tiles. CRITICAL: Use T.copy(Source[slice], out=Dest[slice]) only for bulk, block-level tensor transfers (regions). If loading data requires element-wise scalar operations, boundary-checking masks, or lives inside a T.serial loop, you must use standard Python assignment (=), not T.copy().
+
+5. Loop Structures & Grid Launch: Replace tl.program_id() with T.Kernel(grid_size). Calculate block coordinates (bid_m, bid_n) using integer division and modulo on the pid. Replace Triton's implied block-level execution with explicit T.serial or T.parallel inner loops for iterating over elements within a tile.
+
+6. Math & Reductions: Replace Triton primitives (tl.sum, tl.max, tl.dot) with their TileLang equivalents (e.g., standard T.exp, T.max, or writing explicit reduction loops if complex axis reductions are required). Ensure proper type casting using T.Cast(dtype, value) before arithmetic operations.
+"""
 
 # 5. At the end of the rewritten instruction, add the following implementation requirement:
 
@@ -105,6 +124,8 @@ with open("/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_
 
 print_lock = None
 
+# data = data[:5]  # for testing, only process the first 20 items. Set to -1 for all.
+
 
 def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, Optional[str], Optional[Exception]]:
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -113,9 +134,14 @@ def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, 
             response = client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": original_instruction}
-                ],
+                    {"role": "system", "content": system_prompt_tilelang},
+                    {"role": "user", "content": f"""
+## Source Triton Instruction to Rewrite
+{original_instruction}
+
+## Rewritten TileLang Instruction (NOT the kernel code)
+"""
+                    }],
                 temperature=1.0,
                 max_tokens=2000,
             )
@@ -127,7 +153,9 @@ def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, 
             time.sleep(1.5 * (2 ** attempt) + random.random())
 
 
-max_workers = int(os.environ.get("RENAME_THREADS", max(1, min(8, (os.cpu_count() or 4)))))
+# max_workers = int(os.environ.get("RENAME_THREADS", max(1, min(8, (os.cpu_count() or 4)))))
+max_workers = 64
+print(f"Using max_workers={max_workers} for instruction rewriting.")
 # print_lock = threading.Lock()
 rewritten = [None] * len(data)
 
@@ -154,5 +182,5 @@ for idx, item in enumerate(data):
     # if idx > 2:
     #     break
 
-with open("/home/wentao/GEAK-agent/src/dataloaders/tilelang/renaming_instruction.json", "w") as f:
+with open("/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json", "w") as f:
     json.dump(data, f, indent=4)

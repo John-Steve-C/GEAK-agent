@@ -120,7 +120,23 @@ def format_distribution(distribution, total):
 
 
 if __name__ == "__main__":
-    root = "../outputs/new/optimagent_gpt41_origin_mem"
+    # root = "../outputs/new/optimagent_gpt41_origin_mem"
+
+    # root = "../outputs/new/optimagent_gemini25_flash_dc_mem"
+    root = "../outputs/new/optimagent_gemini25_flash_origin_mem"
+    root = "../outputs/new/optimagent_gemini25_flash_tree_dc_mem"
+
+    # root = "../outputs/new_v2/optimagent_gpt4o_mini_origin_mem"
+    # root = "../outputs/new_v2/optimagent_gpt4o_mini_dc_mem"
+
+    # root = "../outputs/new/optimagent_gpt41_mini_dc_only_mem"
+
+    # root = "../outputs/new_v2/optimagent_gpt41_mini_new_score_dc_mem"
+    # root = "../outputs/new_v2/optimagent_gpt41_mini_real_new_score_dc_mem"
+    # root = "../outputs/new_v2/optimagent_gpt41_mini_tree_dc_mem"
+    # root = "../outputs/new_v2/optimagent_gpt41_mini_new_performance_score_dc_mem"
+    # root = "../outputs/new_v2/optimagent_gpt41_mini_average_score_tree_dc_mem"
+    root = "../outputs/new_v2/optimagent_gpt41_mini_average_score_dynamic_tree_dc_mem"
 
     iter_files = find_iteration_files(root)
     if not iter_files:

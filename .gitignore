@@ -13,3 +13,4 @@ src/triton_run_langchain_tmp
 
 outputs/
 inject_api_key.sh
+tests/
