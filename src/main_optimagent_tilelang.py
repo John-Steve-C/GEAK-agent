@@ -2,7 +2,7 @@ from agents.OptimAgent import OptimAgent
 from models.OpenAI import OpenAIModel
 from models.OpenRouter import OpenRouterModel
 from models.Vllm import VLLMModel
-from dataloaders.TritonBench import TritonBench
+from dataloaders.TilelangBench import TilelangBench
 from args_config import load_config
 
 import os
@@ -14,27 +14,27 @@ def main():
 
 
     # setup LLM model
-    model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
+    # model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
     # model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"), model_id=args.model_id)
-    # model = VLLMModel(model_id=args.model_id)
+    model = VLLMModel(model_id=args.model_id)
 
-    message = [
-        {"role": "system", "content": "You are a helpful and precise assistant for optimizing the performance of Triton kernels."},
-        {"role": "user", "content": "What is 1+1?"},
-    ]
-    response = model.generate(message)
-    print("LLM response:", response)
+    # message = [
+    #     {"role": "system", "content": "You are a helpful and precise assistant for optimizing the performance of Triton kernels."},
+    #     {"role": "user", "content": "What is 1+1?"},
+    # ]
+    # response = model.generate(message)
+    # print("LLM response:", response)
 
     # setup dataset
-    dataset = TritonBench(statis_path=args.statis_path, 
-                          py_folder=args.py_folder, 
-                          instruction_path=args.instruction_path, 
-                          py_interpreter=args.py_interpreter, 
-                          golden_metrics=args.golden_metrics,
-                          perf_ref_folder=args.perf_ref_folder,
-                          perf_G_path=args.perf_G_path,
-                          result_path=args.result_path,
-                          target_kernels=args.target_kernels)
+    dataset = TilelangBench(statis_path=args.statis_path, 
+                            py_folder=args.py_folder, 
+                            instruction_path=args.instruction_path, 
+                            py_interpreter=args.py_interpreter, 
+                            golden_metrics=args.golden_metrics,
+                            perf_ref_folder=args.perf_ref_folder,
+                            perf_G_path=args.perf_G_path,
+                            result_path=args.result_path,
+                            target_kernels=args.target_kernels)
 
     # setup agent
     agent = OptimAgent(model=model, dataset=dataset, corpus_path=args.corpus_path, mem_file=args.mem_file)

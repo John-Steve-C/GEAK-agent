@@ -5,7 +5,6 @@ import importlib.util
 import random
 import numpy as np
 import torch
-from collections import namedtuple
 
 torch.set_printoptions(profile="full")
 
@@ -45,8 +44,16 @@ def import_variable_from_file(file_path, variable_name):
     return getattr(module, variable_name, None)
 
 
+def _is_namedtuple_instance(value):
+    return isinstance(value, tuple) and hasattr(value, "_fields")
+
+
 def _compare(ref, gen, fname, atol=1e-3, rtol=1e-3, verbose=False):
-    if type(gen) == np.ndarray:
+    if isinstance(gen, np.ndarray):
+        if ref.shape != gen.shape:
+            if verbose:
+                print(f"Test failed for file: {fname} with ndarray shape mismatch: {ref.shape} vs {gen.shape}")
+            return False
         if np.allclose(ref, gen, atol=atol, rtol=rtol):
             if verbose:
                 print(f"Reference and generated outputs matched for file: {fname}")
@@ -55,7 +62,11 @@ def _compare(ref, gen, fname, atol=1e-3, rtol=1e-3, verbose=False):
             diff = np.amax(np.abs(ref - gen))
             print(f"Test failed for file: {fname} with abs max diff: {diff}")
         return False
-    if type(gen) == torch.Tensor:
+    if isinstance(gen, torch.Tensor):
+        if ref.shape != gen.shape:
+            if verbose:
+                print(f"Test failed for file: {fname} with tensor shape mismatch: {ref.shape} vs {gen.shape}")
+            return False
         if torch.allclose(ref, gen, atol=atol, rtol=rtol):
             if verbose:
                 print(f"Reference and generated outputs matched for file: {fname}")
@@ -64,26 +75,32 @@ def _compare(ref, gen, fname, atol=1e-3, rtol=1e-3, verbose=False):
             diff = (ref - gen).abs().max()
             print(f"Test failed for file: {fname} with abs max diff: {diff}")
         return False
-    if type(gen) == namedtuple:
-        if ref._fields != gen._fields:
-            return False
-        for field in ref._fields:
-            if not torch.equal(getattr(ref, field), getattr(gen, field)):
-                return False
-        return True
     return ref == gen
 
 
 def compare(ref, gen, fname, atol=1e-3, rtol=1e-3, verbose=False):
-    ret_val = True
-    if (type(gen) == list) or (type(gen) == tuple):
-        for ref_item, gen_item in zip(ref, gen):
-            ret_val &= compare(ref_item, gen_item, fname, atol=atol, rtol=rtol, verbose=verbose)
-    elif type(gen) == dict:
-        return compare(list(ref.values()), list(gen.values()), fname, atol=atol, rtol=rtol, verbose=verbose)
-    else:
-        ret_val &= _compare(ref, gen, fname, atol=atol, rtol=rtol, verbose=verbose)
-    return ret_val
+    if _is_namedtuple_instance(gen):
+        if not _is_namedtuple_instance(ref) or ref._fields != gen._fields:
+            return False
+        return all(
+            compare(getattr(ref, field), getattr(gen, field), fname, atol=atol, rtol=rtol, verbose=verbose)
+            for field in ref._fields
+        )
+    if isinstance(gen, (list, tuple)):
+        if not isinstance(ref, type(gen)) or len(ref) != len(gen):
+            return False
+        return all(
+            compare(ref_item, gen_item, fname, atol=atol, rtol=rtol, verbose=verbose)
+            for ref_item, gen_item in zip(ref, gen)
+        )
+    if isinstance(gen, dict):
+        if not isinstance(ref, dict) or ref.keys() != gen.keys():
+            return False
+        return all(
+            compare(ref[key], gen[key], fname, atol=atol, rtol=rtol, verbose=verbose)
+            for key in ref
+        )
+    return _compare(ref, gen, fname, atol=atol, rtol=rtol, verbose=verbose)
 
 
 def test_correctness(ref_file, gen_file, var_name, atol=1e-3, rtol=1e-3, verbose=False):

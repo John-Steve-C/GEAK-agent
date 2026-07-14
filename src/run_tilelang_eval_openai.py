@@ -237,45 +237,15 @@ def extract_response_code(response) -> str:
     code = clear_code(str(raw_code))
     return fix_tilelang_prim_func_indent(code)
 
-
-def _tool_call_get(tool_call, key, default=None):
-    if isinstance(tool_call, dict):
-        return tool_call.get(key, default)
-    return getattr(tool_call, key, default)
-
-
-def extract_run_test_tool_code(tool_call) -> str:
-    if _tool_call_get(tool_call, "name") != "run_test_and_get_perf":
-        return ""
-
-    args = _tool_call_get(tool_call, "args", {})
-    if isinstance(args, str):
-        try:
-            args = json.loads(args)
-        except json.JSONDecodeError:
-            return ""
-    if not isinstance(args, dict):
-        return ""
-    return str(args.get("code") or "")
-
 # --- 1. 线程安全的全局内存知识库 ---
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SRC_DIR)
 DEFAULT_PATH = os.path.join(SRC_DIR, "tilelang_first_cheatsheet.json")
-OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "tilelang_langchain_tree_dc_v2_fast")
+OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "tilelang_langchain_tree_dc_v2_gpt41_mini")
 CHEATSHEET_PATH = os.path.join(OUTPUT_DIR, "cheatsheet")
 TILELANG_CANARY_ARG = "--tilelang-canary-only"
 TILELANG_PYTHON_ENV = "TILELANG_PYTHON"
-DEFAULT_LLM_MODEL = "/shared/models/hf/Qwen3.5-35B-A3B"
-DEFAULT_LLM_BASE_URL = "http://localhost:8001/v1"
-DEFAULT_LLM_API_KEY = "token-abc123"
-EVAL_GPU_ID = int(os.environ.get("TILELANG_EVAL_GPU", "2"))
-PERF_GPU_ID = int(os.environ.get("TILELANG_PERF_GPU", str(EVAL_GPU_ID)))
-os.environ.setdefault("TILELANG_EVAL_GPU", str(EVAL_GPU_ID))
 ERROR_TYPES = [
-    "LLM/API error",
-    "Empty/parse failure",
-    "Reference/evaluation error",
     "Compile / launch error",
     "TileLang environment error",
     "Runtime error",
@@ -310,47 +280,6 @@ WRONG_ANSWER_KEYWORDS = [
     "generated output is none",
 ]
 PERF_EVAL_LOCK = threading.Lock()
-MAX_LLM_REQUESTS = max(1, int(os.environ.get("TILELANG_MAX_LLM_REQUESTS", "8")))
-MAX_EVAL_WORKERS = max(1, int(os.environ.get("TILELANG_MAX_EVAL_WORKERS", "1")))
-LLM_REQUEST_SEMAPHORE = threading.BoundedSemaphore(MAX_LLM_REQUESTS)
-CORRECTNESS_EVAL_SEMAPHORE = threading.BoundedSemaphore(MAX_EVAL_WORKERS)
-
-
-def is_local_llm_model(model_name: str) -> bool:
-    return model_name.startswith("/") or "qwen" in model_name.lower()
-
-
-def env_flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.lower() in {"1", "true", "yes", "on"}
-
-
-def create_chat_openai(model_name: str, temperature: float):
-    kwargs = {
-        "model": model_name,
-        "temperature": temperature,
-    }
-    base_url = os.environ.get("TILELANG_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
-    api_key = os.environ.get("TILELANG_LLM_API_KEY")
-    is_local_model = is_local_llm_model(model_name)
-
-    if not base_url and is_local_model:
-        base_url = DEFAULT_LLM_BASE_URL
-        api_key = api_key or DEFAULT_LLM_API_KEY
-
-    if base_url:
-        kwargs["base_url"] = base_url
-        kwargs["api_key"] = api_key or os.environ.get("OPENAI_API_KEY") or DEFAULT_LLM_API_KEY
-    elif api_key:
-        kwargs["api_key"] = api_key
-
-    max_tokens = os.environ.get("TILELANG_LLM_MAX_TOKENS")
-    if max_tokens:
-        kwargs["max_tokens"] = int(max_tokens)
-
-    return ChatOpenAI(**kwargs)
 
 
 def normalize_error_text(*parts) -> str:
@@ -376,44 +305,6 @@ def is_tilelang_environment_error(error_text: str) -> bool:
     )
 
 
-def is_llm_api_error(error_text: str) -> bool:
-    return any(
-        marker in error_text
-        for marker in (
-            "agent 运行异常",
-            "badrequesterror",
-            "tool choice requires",
-            "connection error",
-            "rate limit",
-            "authentication",
-            "api key",
-        )
-    )
-
-
-def is_reference_evaluation_error(error_text: str) -> bool:
-    return any(
-        marker in error_text
-        for marker in (
-            "reference module import/call failure",
-            "internal triton ptx codegen error",
-            "could not execute module",
-        )
-    )
-
-
-def is_empty_or_parse_error(error_text: str) -> bool:
-    return any(
-        marker in error_text
-        for marker in (
-            "empty model response",
-            "no code was returned",
-            "no final code",
-            "解析完全失败",
-        )
-    )
-
-
 def classify_result(result: dict) -> Optional[str]:
     pass_call = bool(result.get("pass_call"))
     pass_exe = bool(result.get("pass_exe"))
@@ -424,12 +315,6 @@ def classify_result(result: dict) -> Optional[str]:
         return "Performance fail"
     if pass_perf or (pass_call and pass_exe):
         return None
-    if is_llm_api_error(error_text):
-        return "LLM/API error"
-    if is_empty_or_parse_error(error_text):
-        return "Empty/parse failure"
-    if is_reference_evaluation_error(error_text):
-        return "Reference/evaluation error"
     if is_tilelang_environment_error(error_text):
         return "TileLang environment error"
     if not pass_call:
@@ -479,7 +364,7 @@ def evaluate_perf_outside(dataset, code: str, filename: str):
             dataset.run_perf_script_single(
                 script_dir=perf_script_dir,
                 log_dir=perf_log_dir,
-                gpu_id=PERF_GPU_ID,
+                gpu_id=0,
                 script_name=perf_file_name,
             )
 
@@ -502,7 +387,7 @@ class ThreadSafeCheatsheetManager:
         self.lock = threading.Lock()
         self.save_path = tmp_path
         os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
-
+        
         # 仅在初始化时读一次文件
         # load_path = tmp_path if os.path.exists(tmp_path) else default_path
         with open(default_path, "r", encoding="utf-8") as f:
@@ -547,27 +432,26 @@ def run_test_outside(dataset, code: str, filename: str) -> str:
         safe_name = filename.replace(".py", "")
         tmp_dir = os.path.join(OUTPUT_DIR, "tmp", safe_name)
         exe_dir = os.path.join(OUTPUT_DIR, "exe", safe_name)
-
-        with CORRECTNESS_EVAL_SEMAPHORE:
-            pass_call, pass_exe, c_out, c_err, e_out, e_err = dataset.test_opt_correctness(
-                code,
-                filename,
-                tmp_dir=tmp_dir,
-                exe_dir=exe_dir,
-            )
-
+        
+        pass_call, pass_exe, c_out, c_err, e_out, e_err = dataset.test_opt_correctness(
+            code, 
+            filename, 
+            tmp_dir=tmp_dir, 
+            exe_dir=exe_dir,
+        )
+        
         result = {
-            "pass_call": pass_call,
+            "pass_call": pass_call, 
             "pass_exe": pass_exe,
             "call_error": c_err if not pass_call else None,
             "exec_error": e_err if not pass_exe else None,
         }
-
+        
         if pass_exe:
             result["details"] = e_out[:200]
-
+            
         return result
-
+        
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -625,14 +509,12 @@ def run_tilelang_canary():
 
 def run_tilelang_canary_subprocess(interpreter: str):
     ensure_eval_pythonpath()
-    env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = str(EVAL_GPU_ID)
     result = subprocess.run(
         [interpreter, os.path.abspath(__file__), TILELANG_CANARY_ARG],
         capture_output=True,
         text=True,
         timeout=120,
-        env=env,
+        env=os.environ.copy(),
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -644,9 +526,9 @@ def run_tilelang_canary_subprocess(interpreter: str):
 
 # --- 2. 封装 Tools ---
 
-def create_tilelang_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
+def create_triton_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
     """注入 dataset 和 线程安全的 manager"""
-
+    
     @tool
     def run_test_and_get_perf(code: str, filename: str) -> str:
         """[EXECUTION] 直接调用底层 dataset 接口进行正确性校验和性能测试。"""
@@ -654,14 +536,14 @@ def create_tilelang_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
         result = run_test_outside(dataset, code, filename)
         if result.get("status") == "error":
             return json.dumps(result)
-
+            
         if result.get("pass_exe"):
             result["message"] = "Correctness check passed."
-
+            
         return json.dumps(result)
 
     @tool
-    def update_cheatsheet(ops_json: str):
+    def curate_cheatsheet(ops_json: str):
         """[CURATION] 将当前发现的优化策略或失败模式沉淀到知识库。"""
         # 直接使用内存里的 manager，有锁保护，无需读写文件
         safe_manager.apply_operations(ops_json)
@@ -672,26 +554,20 @@ def create_tilelang_tools(dataset, safe_manager: ThreadSafeCheatsheetManager):
         """[MEMORY] 读取知识库中最高热度的 20 条优化建议。"""
         return safe_manager.to_string_for_prompt(top_k_hot=top_k)
 
-    return [run_test_and_get_perf, read_cheatsheet, update_cheatsheet]
+    # return [run_test_and_get_perf, curate_cheatsheet, read_cheatsheet]
+    return [run_test_and_get_perf]
 
 # --- 3. 核心 Workflow 类 ---
 
-class TilelangLangChainWorkflow:
-    def __init__(self, dataset, manager, model_name=DEFAULT_LLM_MODEL):
+class TritonLangChainWorkflow:
+    def __init__(self, dataset, manager, model_name="gpt-4.1-nano"):
         self.dataset = dataset
         self.manager = manager
-        self.llm = create_chat_openai(model_name=model_name, temperature=1.0)
-        self.use_agent_tools = env_flag("TILELANG_ENABLE_AGENT_TOOLS", default=not is_local_llm_model(model_name))
-        self.tools = create_tilelang_tools(dataset, manager) if self.use_agent_tools else []
-
-        self.system_prompt = template_with_cheatsheet if self.use_agent_tools else template_prompt
-        self.system_prompt = self.system_prompt.replace("curate_cheatsheet", "update_cheatsheet")
-        if not self.use_agent_tools:
-            self.system_prompt += (
-                "\n\nLocal no-tool mode: LangChain tools are disabled for this run. "
-                "Do not try to call tools. Output the final JSON code directly; "
-                "the evaluation harness will run correctness tests after your response."
-            )
+        self.llm = ChatOpenAI(model=model_name, temperature=1.0)
+        self.tools = create_triton_tools(dataset, manager)
+        
+        self.system_prompt = template_prompt
+        # self.system_prompt = template_with_cheatsheet
 
         self.agent = create_agent(
             model=self.llm,
@@ -704,7 +580,7 @@ class TilelangLangChainWorkflow:
         print(f"\n[Processing]: {filename}")
         signature_text = "\n".join(f"- {sig}" for sig in function_signature) if function_signature else "- No explicit public signature found"
         shape_hint_text = test_shape_hints if test_shape_hints else "- No tensor shape hints extracted from unit tests"
-
+        
         result_dict = {
             "filename": filename,
             "instruction": instruction,
@@ -721,53 +597,14 @@ class TilelangLangChainWorkflow:
             "money_cost": None,
         }
 
-        def evaluate_candidate_code(code: str, response_text: str) -> bool:
-            if not code.strip():
-                return False
-
-            result_dict["response"] = code
-            tool_result = run_test_outside(self.dataset, code, filename)
-            if tool_result.get("status") == "error":
-                result_dict["exec_error"] = tool_result.get("message")
-            else:
-                result_dict["pass_exe"] = tool_result["pass_exe"]
-                result_dict["pass_call"] = tool_result["pass_call"]
-                result_dict["call_error"] = tool_result.get("call_error")
-                result_dict["exec_error"] = tool_result.get("exec_error")
-
-                status = "✅ 成功" if tool_result["pass_exe"] else "❌ 失败"
-                print(f"{status} [{filename}]: pass_call={tool_result['pass_call']}, pass_exe={tool_result['pass_exe']}")
-                if not tool_result["pass_call"]:
-                    print(f"  Call error: {tool_result.get('call_error')}")
-                elif not tool_result["pass_exe"]:
-                    print(f"  Exec error: {tool_result.get('exec_error')}")
-
-                if result_dict["pass_exe"]:
-                    pass_perf, ms, efficiency, perf_error = evaluate_perf_outside(
-                        self.dataset,
-                        code,
-                        filename,
-                    )
-                    result_dict["pass_perf"] = pass_perf
-                    result_dict["ms"] = ms
-                    result_dict["efficiency"] = efficiency
-                    if perf_error is not None:
-                        result_dict["exec_error"] = perf_error
-
-            self.manager.record_usage(model_thought=response_text, current_iter=iter)
-            return True
-
         with get_openai_callback() as cb:
             final_response = ""
-            last_tool_code = ""
-            evaluated_code = False
-
+            
             try:
-                with LLM_REQUEST_SEMAPHORE:
-                    events = list(self.agent.stream(
-                        {"messages": [{
-                            "role": "user",
-                            "content": f"""
+                for event in self.agent.stream(
+                    {"messages": [{
+                        "role": "user", 
+                        "content": f"""
 **Task Instruction:**
 {instruction}
 
@@ -788,52 +625,71 @@ Do not use Triton launch syntax like `kernel[(grid,)](...)`.
 **Filename:**
 {filename}
 """
-                        }]},
-                        stream_mode="values"
-                    ))
-
-                for event in events:
+}]},
+                    stream_mode="values"
+                ):
                     if "messages" in event:
                         last_msg = event["messages"][-1]
-
+                        
                         if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
                             for tc in last_msg.tool_calls:
-                                tool_name = _tool_call_get(tc, "name", "")
-                                print(f"🧠 [{filename}] 决策: 调用 {tool_name}...")
-                                tool_code = extract_run_test_tool_code(tc)
-                                if tool_code.strip():
-                                    last_tool_code = tool_code
-
+                                print(f"🧠 [{filename}] 决策: 调用 {tc['name']}...")
+                        
                         if last_msg.type == "ai" and last_msg.content:
                             if not (hasattr(last_msg, "tool_calls") and last_msg.tool_calls):
                                 final_response = last_msg.content
-
+                
+                            # 解析代码
+                            # print('final_response: ', final_response)
                             try:
                                 code = extract_response_code(final_response)
                             except Exception as e:
                                 result_dict["call_error"] = f"解析完全失败: {e}"
-                                continue
+                                return result_dict
+                            
+                            result_dict["response"] = code
+                            # print("parse code:\n", code)
+                            
+                            # 最终测试
+                            tool_result = run_test_outside(self.dataset, code, filename)
+                            if tool_result.get("status") == "error":
+                                result_dict["exec_error"] = tool_result.get("message")
+                            else:
+                                result_dict["pass_exe"] = tool_result["pass_exe"]
+                                result_dict["pass_call"] = tool_result["pass_call"]
+                                result_dict["call_error"] = tool_result.get("call_error")
+                                result_dict["exec_error"] = tool_result.get("exec_error")
+                                
+                                status = "✅ 成功" if tool_result['pass_exe'] else "❌ 失败"
+                                print(f"{status} [{filename}]: pass_call={tool_result['pass_call']}, pass_exe={tool_result['pass_exe']}")
+                                if not tool_result['pass_call']:
+                                    print(f"  Call error: {tool_result.get('call_error')}")
+                                elif not tool_result['pass_exe']:
+                                    print(f"  Exec error: {tool_result.get('exec_error')}")
 
-                            if code.strip():
-                                evaluated_code = evaluate_candidate_code(code, final_response) or evaluated_code
+                                if result_dict["pass_exe"]:
+                                    pass_perf, ms, efficiency, perf_error = evaluate_perf_outside(
+                                        self.dataset,
+                                        code,
+                                        filename,
+                                    )
+                                    result_dict["pass_perf"] = pass_perf
+                                    result_dict["ms"] = ms
+                                    result_dict["efficiency"] = efficiency
+                                    if perf_error is not None:
+                                        result_dict["exec_error"] = perf_error
 
-                if not evaluated_code:
-                    if last_tool_code.strip():
-                        code = fix_tilelang_prim_func_indent(clear_code(last_tool_code))
-                        evaluated_code = evaluate_candidate_code(code, final_response or last_tool_code)
-                    else:
-                        result_dict["call_error"] = result_dict["call_error"] or (
-                            "Empty model response: no code was returned by the model and no run_test_and_get_perf code was available."
-                        )
-
+                            # 记录 Manager 统计
+                            self.manager.record_usage(model_thought=final_response, current_iter=iter)
+                
             except Exception as outer_e:
                 result_dict["call_error"] = f"Agent 运行异常: {outer_e}"
-
+                
             print(f"📊 [{filename}] Token: {cb.total_tokens} | 成本: ${cb.total_cost:.4f}")
             result_dict["token_usage"] = cb.total_tokens
             result_dict["money_cost"] = cb.total_cost
             result_dict["error_type"] = classify_result(result_dict)
-
+            
         return result_dict
 
 # --- 4. 启动示例 ---
@@ -866,30 +722,24 @@ if __name__ == "__main__":
     # "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
     # "/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json"
     dataset = TilelangBench(statis_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json",
-                            py_folder="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1",
-                            instruction_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json",
-                            py_interpreter=tilelang_py_interpreter,
+                            py_folder="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1", 
+                            instruction_path="/home/wentao/GEAK-agent/src/dataloaders/tilelang/tilelang_instruction.json", 
+                            py_interpreter=tilelang_py_interpreter, 
                             golden_metrics="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics",
                             perf_G_path="/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G",
                             target_kernels=target_kernels,
                             )
-
-    workflow = TilelangLangChainWorkflow(
+    
+    workflow = TritonLangChainWorkflow(
         dataset=dataset,
         manager=global_manager,
-        model_name=os.environ.get("TILELANG_LLM_MODEL", DEFAULT_LLM_MODEL)
+        model_name='gpt-4.1-mini'
     )
 
     start_idx = int(os.environ.get("TILELANG_START_IDX", "0"))
     length = int(os.environ.get("TILELANG_LENGTH", "50"))      # -1 means for all
     epoch = int(os.environ.get("TILELANG_EPOCHS", "1"))
-    max_workers = int(os.environ.get("TILELANG_MAX_WORKERS", "32")) # 【关键】设置流水线线程数
-    print(
-        f"Concurrency: pipeline={max_workers}, "
-        f"llm={MAX_LLM_REQUESTS}, "
-        f"correctness={MAX_EVAL_WORKERS}, performance=1, "
-        f"eval_gpu={EVAL_GPU_ID}, perf_gpu={PERF_GPU_ID}"
-    )
+    max_workers = int(os.environ.get("TILELANG_MAX_WORKERS", "64")) # 【关键】设置多线程并发数
 
     tasks = dataset.problem_states[start_idx : start_idx + length if length > 0 else None]
     filenames = [ps.filename for ps in tasks]
@@ -899,23 +749,23 @@ if __name__ == "__main__":
 
     for iter_num in range(epoch):
         epoch_results = []
-
+        
         print(f"\n========== 开始 Epoch {iter_num} ==========")
-
+        
         # 使用线程池并发执行 Agent 任务
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有任务
             future_to_file = {
                 executor.submit(
-                    workflow.run_sample,
-                    ps.instruction,
-                    ps.filename,
-                    extract_function_signatures(ps.label, mode='tilelang', test_code=ps.test_code),
+                    workflow.run_sample, 
+                    ps.instruction, 
+                    ps.filename, 
+                    extract_function_signatures(ps.label, mode='tilelang', test_code=ps.test_code), 
                     iter_num,
                     extract_test_shape_hints(ps.test_code),
                 ): ps.filename for ps in tasks
             }
-
+            
             # 收集结果
             for future in as_completed(future_to_file):
                 filename = future_to_file[future]
@@ -928,11 +778,11 @@ if __name__ == "__main__":
         # Epoch 结束后的清理和保存操作
         global_manager.prune_by_utility(min_usage_ratio=0.5)
         global_manager.save_to_disk(iter_num)
-
+        
         # 保存结果日志
         with open(f"{OUTPUT_DIR}/results_iter_{iter_num}.json", "w", encoding="utf-8") as f:
             json.dump(epoch_results, f, ensure_ascii=False, indent=4)
-
+        
         total = len(filenames)
         if total == 0:
             continue
@@ -982,11 +832,3 @@ if __name__ == "__main__":
             print("Error distribution:", file=f)
             for error_type, count in error_distribution.items():
                 print(f"  - {error_type}: {count} ({count / total:.4f})", file=f)
-
-        api_error_count = error_distribution["LLM/API error"]
-        if api_error_count >= 3:
-            print(
-                f"Stopping after Epoch {iter_num}: {api_error_count}/{total} LLM/API requests failed. "
-                "Check the vLLM server before resuming."
-            )
-            break

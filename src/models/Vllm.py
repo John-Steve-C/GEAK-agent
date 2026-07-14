@@ -11,9 +11,11 @@ from openai import OpenAI
 class VLLMModel():
     def __init__(
         self,
-        model_id="/shared/models/hf/Meta-Llama-3-8B-Instruct",
+        model_id="/shared/models/hf/Qwen3.5-35B-A3B",
         tensor_parallel_size=2,
         dtype="bfloat16",
+        base_url="http://localhost:8001/v1",
+        api_key="token-abc123",
     ):
         self.model_id = model_id
         # self.llm = LLM(
@@ -22,10 +24,17 @@ class VLLMModel():
         #     dtype=dtype,
         # )
         self.client = OpenAI(
-            base_url="http://localhost:8000/v1",
-            api_key="token-abc123",
+            base_url=base_url,
+            api_key=api_key,
             timeout=300
             )
+        self.system_prompt = (
+            "You are an expert programmer. Before generating the final code, "
+            "strictly plan your logic step-by-step in the thinking phase. "
+            "Ensure your thoughts remain coherent, focused on the technical "
+            "implementation, and written in clear natural language. Never "
+            "output repeating numbers or symbols."
+        )
 
 
     # def _messages_to_prompt(self, messages: List[dict]) -> str:
@@ -83,19 +92,51 @@ class VLLMModel():
                  messages: List, 
                  temperature=1, 
                  presence_penalty=0, 
-                 frequency_penalty=0.4, 
-                 max_tokens=5000) -> str:
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_id,
-                prompt="Hello, how are you?",
-                temperature=temperature,
+                 frequency_penalty=0,
+                 max_tokens=4096,
+                 top_p=0.95,
+                 min_p=0.05,
+                 top_k=20,
+                 repetition_penalty=1.0,
+                 enable_thinking=True) -> str:
+        if not messages or messages[0].get("role") != "system":
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                *messages,
+            ]
+        response = self.client.chat.completions.create(
+            model=self.model_id,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
+            extra_body={
+                "repetition_penalty": repetition_penalty,
+                "min_p": min_p,
+                "top_k": top_k,
+                "chat_template_kwargs": {
+                    "enable_thinking": enable_thinking,
+                },
+            },
+        )
+        if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
+            raise ValueError("No response choices returned from the API.")
+        choice = response.choices[0]
+        message = choice.message
+        output = message.content
+        if output is not None:
+            output = output.strip()
+        if not output:
+            reasoning = (
+                getattr(message, "reasoning", None)
+                or getattr(message, "reasoning_content", None)
             )
-            if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
-                raise ValueError("No response choices returned from the API.")
-            output = response.choices[0].message.content
-        except Exception as e:
-            print(f"Error in generate resposne {e}")
-            output = None
-        
+            raise ValueError(
+                "VLLM returned reasoning but no final content "
+                f"(finish_reason={choice.finish_reason}, "
+                f"reasoning_chars={len(reasoning or '')}). "
+                "Increase max_tokens or disable thinking."
+            )
         return output

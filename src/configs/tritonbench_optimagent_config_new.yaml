@@ -1,10 +1,12 @@
 # LLM model
 # api_key: ${oc.env:OPENAI_API_KEY}   # need hydra support
 # model_id: "dvue-aoai-001-gpt-4.1"
-model_id: "gpt-4.1-mini"
+
+# model_id: "gpt-4.1-mini"
 # model_id: "gemini-2.5-flash"
 # model_id: "google/gemini-2.5-flash"
 # model_id: "qwen/qwen3-coder:free"
+model_id: "/shared/models/hf/Qwen3.5-35B-A3B"
 temperature: 1.0
 
 
@@ -60,7 +62,7 @@ output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_dc.jsonl"  #
 output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_tree_dc.jsonl"  # average weighted score tree dc
 output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_dynamic_tree_dc.jsonl"  # average weighted score tree dc + dynamic category
 
-
+output_path: "../outputs/new_v2/optimagent_qwen35_average_score_dynamic_tree_dc.jsonl"  # average weighted score tree dc + dynamic category
 
 
 max_iteration: 10

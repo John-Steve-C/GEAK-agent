@@ -67,7 +67,7 @@ Indentation rule (CRITICAL):
 The `def main(...)` line must be indented under `@T.prim_func` with the same indentation level as the decorator.
 Do NOT place `def main` at the top level.
 
-TileLang kernels are compiled when the outer function is called:
+TileLang kernel factories are compiled when the private `@tl.jit` function is called:
 ```python
 kernel = example_kernel(N)
 kernel(A, B, C)
@@ -82,22 +82,19 @@ from tilelang import language as T
 Include other imports *only if absolutely necessary*.
 
 3. Function Signature (CRITICAL)
-Define EACH public API function with EXACTLY the required signature.
+Define EACH public API function with EXACTLY the required signature shown in the prompt.
 Preserve only the tested public wrapper/API functions listed in the prompt.
 Do NOT reproduce Triton internal helper kernels unless you explicitly need private helpers for your own implementation.
-Do NOT change: parameter names, parameter order, parameter count.
-
-Use PyTorch type hints:
-```
-x: torch.Tensor
-```
-for tensor arguments.
+Do NOT change: parameter names, parameter order, parameter count, or defaults.
+Do NOT add Python type hints, return annotations, `Optional[...]`, or `torch.Tensor` annotations to public API signatures.
 
 Wrapper rule (CRITICAL):
-- The tested public wrapper keeps the required signature.
+- The tested public wrapper keeps the required signature and is a normal Python function.
+- The tested public wrapper must NOT be decorated with `@tl.jit`.
 - The wrapper allocates outputs and derives launch parameters.
-- The wrapper builds or instantiates the TileLang kernel function.
+- The wrapper builds or instantiates a private `@tl.jit` TileLang kernel factory.
 - The wrapper invokes the compiled TileLang kernel directly.
+- Private `@tl.jit` functions should take only compile-time Python values such as ints, bools, floats, and dtype strings. Do NOT pass `torch.Tensor` arguments to private `@tl.jit` factories.
 - Do NOT use Triton launch syntax such as `kernel[(grid,)](...)`.
 - Do NOT emit Triton code or `triton.language` APIs.
 
@@ -135,20 +132,29 @@ Use TileLang primitives correctly:
     T.clear(...)
     ```
 
+Forbidden API replacements:
+    - Do NOT use `T.if_scope`; use a normal `if` statement in `@T.prim_func`, or `T.if_then_else` for expression selection.
+    - Do NOT use `T.Assume`; use `T.assume`.
+    - Do NOT use `T.get_block_id`; use the variable from `with T.Kernel(...) as bid` or `T.get_block_binding(0)`.
+    - Do NOT use `T.cdiv`; use `T.ceildiv`.
+    - Do NOT use `T.constant`; use a Python literal such as `0` or `T.cast(0, dtype)`.
+    - Do NOT use `T.if_then`; use `T.if_then_else`.
+    - Do NOT use `T.any`, `T.unary`, or `T.Cast`; use concrete dimensions, explicit math primitives, and `T.cast(value, dtype)` / `value.astype(dtype)`.
+    - Do NOT use `.dtype.name`, raw `str(tensor.dtype)`, `str(tensor.dtype).lower()`, `T.Any`, `T.Buffer((None, ...))`, `T.Buffer((-1, ...))`, `T.int32`/`T.int64` as buffer dimensions, or Python typing objects inside TileLang buffer declarations.
+    - Do NOT call a nested `@T.prim_func` directly. Return it from the private `@tl.jit` factory and call the compiled factory result from the public wrapper.
+
 5. Memory & Type Safety
 Be careful with shared memory accesses, index bounds, and type casting.
 For accumulation, prefer higher precision:
 ```
 astype("float32")
 ```
+Do not update Python scalar accumulators with `+=` or self-reassignment inside `T.serial` loops. Use `T.alloc_local((1,), dtype)` or a local buffer accumulator and update element `[0]`.
 
 6. PyTorch Tensor Usage
 
-Assume tensors passed to the kernel are:
-```
-torch.Tensor
-```
-located on GPU.
+The unit tests pass GPU `torch.Tensor` objects to the public Python wrapper.
+The public wrapper passes tensors only when invoking the compiled TileLang kernel object, not when constructing the private `@tl.jit` kernel factory.
 
 Example execution:
 ```
@@ -267,7 +273,7 @@ Indentation rule (CRITICAL):
 The `def main(...)` line must be indented under `@T.prim_func` with the same indentation level as the decorator.
 Do NOT place `def main` at the top level.
 
-TileLang kernels are compiled when the outer function is called:
+TileLang kernel factories are compiled when the private `@tl.jit` function is called:
 ```python
 kernel = example_kernel(N)
 kernel(A, B, C)
@@ -282,22 +288,19 @@ from tilelang import language as T
 Include other imports *only if absolutely necessary*.
 
 3. Function Signature (CRITICAL)
-Define EACH public API function with EXACTLY the required signature.
+Define EACH public API function with EXACTLY the required signature shown in the prompt.
 Preserve only the tested public wrapper/API functions listed in the prompt.
 Do NOT reproduce Triton internal helper kernels unless you explicitly need private helpers for your own implementation.
-Do NOT change: parameter names, parameter order, parameter count.
-
-Use PyTorch type hints:
-```
-x: torch.Tensor
-```
-for tensor arguments.
+Do NOT change: parameter names, parameter order, parameter count, or defaults.
+Do NOT add Python type hints, return annotations, `Optional[...]`, or `torch.Tensor` annotations to public API signatures.
 
 Wrapper rule (CRITICAL):
-- The tested public wrapper keeps the required signature.
+- The tested public wrapper keeps the required signature and is a normal Python function.
+- The tested public wrapper must NOT be decorated with `@tl.jit`.
 - The wrapper allocates outputs and derives launch parameters.
-- The wrapper builds or instantiates the TileLang kernel function.
+- The wrapper builds or instantiates a private `@tl.jit` TileLang kernel factory.
 - The wrapper invokes the compiled TileLang kernel directly.
+- Private `@tl.jit` functions should take only compile-time Python values such as ints, bools, floats, and dtype strings. Do NOT pass `torch.Tensor` arguments to private `@tl.jit` factories.
 - Do NOT use Triton launch syntax such as `kernel[(grid,)](...)`.
 - Do NOT emit Triton code or `triton.language` APIs.
 
@@ -335,20 +338,29 @@ Use TileLang primitives correctly:
     T.clear(...)
     ```
 
+Forbidden API replacements:
+    - Do NOT use `T.if_scope`; use a normal `if` statement in `@T.prim_func`, or `T.if_then_else` for expression selection.
+    - Do NOT use `T.Assume`; use `T.assume`.
+    - Do NOT use `T.get_block_id`; use the variable from `with T.Kernel(...) as bid` or `T.get_block_binding(0)`.
+    - Do NOT use `T.cdiv`; use `T.ceildiv`.
+    - Do NOT use `T.constant`; use a Python literal such as `0` or `T.cast(0, dtype)`.
+    - Do NOT use `T.if_then`; use `T.if_then_else`.
+    - Do NOT use `T.any`, `T.unary`, or `T.Cast`; use concrete dimensions, explicit math primitives, and `T.cast(value, dtype)` / `value.astype(dtype)`.
+    - Do NOT use `.dtype.name`, raw `str(tensor.dtype)`, `str(tensor.dtype).lower()`, `T.Any`, `T.Buffer((None, ...))`, `T.Buffer((-1, ...))`, `T.int32`/`T.int64` as buffer dimensions, or Python typing objects inside TileLang buffer declarations.
+    - Do NOT call a nested `@T.prim_func` directly. Return it from the private `@tl.jit` factory and call the compiled factory result from the public wrapper.
+
 5. Memory & Type Safety
 Be careful with shared memory accesses, index bounds, and type casting.
 For accumulation, prefer higher precision:
 ```
 astype("float32")
 ```
+Do not update Python scalar accumulators with `+=` or self-reassignment inside `T.serial` loops. Use `T.alloc_local((1,), dtype)` or a local buffer accumulator and update element `[0]`.
 
 6. PyTorch Tensor Usage
 
-Assume tensors passed to the kernel are:
-```
-torch.Tensor
-```
-located on GPU.
+The unit tests pass GPU `torch.Tensor` objects to the public Python wrapper.
+The public wrapper passes tensors only when invoking the compiled TileLang kernel object, not when constructing the private `@tl.jit` kernel factory.
 
 Example execution:
 ```
@@ -458,11 +470,13 @@ Include other imports *only if absolutely necessary*.
 3. Function Signature (CRITICAL)
 Preserve Interface Integrity: Maintain exact parity with the original Triton signature. All outer wrapper function names, class names, and input/output tensor names MUST remain identical. Do NOT change parameter names, parameter order, or parameter count.
 Preserve only the tested public wrapper/API functions listed in the prompt. Do NOT reproduce Triton internal helper kernels unless you explicitly need private helpers for your own implementation.
-Use PyTorch type hints (e.g., x: `torch.Tensor`) for tensor arguments.
+Do NOT add Python type hints, return annotations, `Optional[...]`, or `torch.Tensor` annotations to public API signatures.
 
 Wrapper Rules: 
+- The tested public wrapper is a normal Python function and must NOT be decorated with `@tl.jit`.
 - The wrapper allocates outputs and derives launch parameters.
-- The wrapper builds/instantiates the TileLang kernel function and invokes it directly (e.g., `kernel = example_kernel(N); kernel(A, B, C)`).
+- The wrapper builds/instantiates a private `@tl.jit` TileLang kernel factory and invokes it directly (e.g., `kernel = example_kernel(N); kernel(A, B, C)`).
+- Private `@tl.jit` functions should take only compile-time Python values such as ints, bools, floats, and dtype strings. Do NOT pass `torch.Tensor` arguments to private `@tl.jit` factories.
 - Do NOT use Triton launch syntax (e.g., `kernel[(grid,)](...)`).
 - Do NOT emit Triton code or `triton.language` APIs.
 
@@ -470,6 +484,9 @@ Wrapper Rules:
 - Buffer Indexing vs. Pointers: Completely eliminate Triton's flat pointer arithmetic (`ptr + offsets`) and boolean mask arrays. Replace them with TileLang’s structured N-dimensional buffer indexing (e.g., `Buffer[global_i, global_j]`).
 - Explicit Loops: Replace Triton's implied block-level execution with explicit `T.serial` or `T.parallel` inner loops for iterating over elements within a tile.
 - Primitives: Replace `tl.sum`, `tl.max`, or `tl.dot` with the corresponding TileLang `T.sum`, `T.max`, and `T.gemm` (or `T.matmul`) primitives. Ensure proper type casting using `T.Cast(dtype, value)` before arithmetic operations.
+- Forbidden API replacements: do NOT use `T.if_scope`, `T.Assume`, `T.get_block_id`, `T.cdiv`, `T.constant`, `T.if_then`, `T.any`, `T.unary`, or `T.Cast`; use normal `if`/`T.if_then_else`, `T.assume`, the `T.Kernel` bound block variable or `T.get_block_binding(0)`, `T.ceildiv`, literals/`T.cast`, explicit math primitives, and `T.cast(value, dtype)`/`value.astype(dtype)` respectively.
+- Do NOT use `.dtype.name`, raw `str(tensor.dtype)`, `str(tensor.dtype).lower()`, `T.Any`, `T.Buffer((None, ...))`, `T.Buffer((-1, ...))`, `T.int32`/`T.int64` as buffer dimensions, or Python typing objects inside TileLang buffer declarations.
+- Do NOT update Python scalar accumulators with `+=` or self-reassignment inside `T.serial`; use `T.alloc_local((1,), dtype)` or local buffers.
 
 5. Memory Movement & Type Safety (CRITICAL)
 - Use `T.alloc_buffer(..., scope="shared")` or `T.alloc_shared(...)` for intermediate tiles.
@@ -478,11 +495,8 @@ Wrapper Rules:
 
 6. PyTorch Tensor Usage
 
-Assume tensors passed to the kernel are:
-```
-torch.Tensor
-```
-located on GPU.
+The unit tests pass GPU `torch.Tensor` objects to the public Python wrapper.
+The public wrapper passes tensors only when invoking the compiled TileLang kernel object, not when constructing the private `@tl.jit` kernel factory.
 
 Example execution:
 ```

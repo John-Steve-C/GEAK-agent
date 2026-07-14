@@ -1,0 +1,29 @@
+# LLM model
+model_id: "gpt-4.1-mini"
+temperature: 1.0
+
+datapath_prefix: "/home/wentao/GEAK-eval/geak_eval/data/"
+
+# TritonBench
+statis_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
+py_folder: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1"
+instruction_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json"
+corpus_path: "./dataloaders/TB_eval/train_crawl.json"
+golden_metrics: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics"
+perf_ref_folder: null
+perf_G_path: "/home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G"
+py_interpreter: "python"
+result_path: null
+mem_file: null
+start_iter: 0
+datalen: 147
+start_idx: 0
+target_kernels: null
+
+# agent
+output_path: "../outputs/new_v2/optimagent_gpt41_mini_average_score_dynamic_tree_dc_train.jsonl"
+max_iteration: 10
+multi_thread: true
+thread_num: 128
+ancestor_num: 5
+update_cheatsheet: true

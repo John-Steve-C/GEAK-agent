@@ -125,7 +125,7 @@ class TilelangBench:
                 temp_file.write(script_content + "\n" + "#" * 146 + "\n" + ps.test_code)
 
             env = os.environ.copy()
-            env["HIP_VISIBLE_DEVICES"] = str(gpu_id)
+            env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
             # Run the temporary Python file
             result = subprocess.run(
                 ["python", temp_path], 
@@ -318,7 +318,7 @@ class TilelangBench:
         log_file = os.path.join(log_dir, f"{script_name}.log")
         err_file = os.path.join(log_dir, f"{script_name}.err")
 
-        cmd = f"HIP_VISIBLE_DEVICES={gpu_id} python {script}"
+        cmd = f"CUDA_VISIBLE_DEVICES={gpu_id} python {script}"
         # print(f"Running: {cmd}")
 
         with open(log_file, "w") as log, open(err_file, "w") as err:
@@ -368,12 +368,12 @@ class TilelangBench:
                 # log_file = os.path.join(log_dir, f"{script_name}.log")
                 # err_file = os.path.join(log_dir, f"{script_name}.err")
 
-                # cmd = f"HIP_VISIBLE_DEVICES={gpu_id} python {script}"
+                # cmd = f"CUDA_VISIBLE_DEVICES={gpu_id} python {script}"
                 # print(f"Running: {cmd}")
 
                 # with open(log_file, "w") as log, open(err_file, "w") as err:
                 env = os.environ.copy()
-                env["HIP_VISIBLE_DEVICES"] = str(gpu_id)
+                env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
                 try:
                     result = subprocess.run(
                             [self.py_interpreter, script], 
@@ -390,6 +390,46 @@ class TilelangBench:
                 #     pass
                 tqdm.write(f"✅ finished {idx+1}/{total_scripts}: {os.path.basename(script)}")
                 pbar.update(1)
+
+    def run_perf_script_single(self, script_dir, log_dir, gpu_id, script_name):
+        """
+        Runs a single performance script.
+
+        Args:
+            script_dir: Directory containing the script (e.g. ./tmp/perf_gen)
+            log_dir: Directory to save logs
+            gpu_id: GPU ID to use
+            script_name: The name of the script file to run (e.g. gemm_perf.py)
+        """
+        os.makedirs(log_dir, exist_ok=True)
+
+        script_path = os.path.join(script_dir, script_name)
+        if not os.path.exists(script_path):
+            print(f"Script not found: {script_path}")
+            return
+
+        timeout_sec = 600  # 10 mins
+
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+        try:
+            result = subprocess.run(
+                [self.py_interpreter, script_path],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=timeout_sec
+            )
+
+            if result.returncode != 0:
+                print(f"Script {script_name} failed with return code {result.returncode}")
+        except subprocess.TimeoutExpired:
+            print(f"The subprocess timed out for {script_name}")
+        except Exception as e:
+            print(f"The subprocess failed for {script_name} due to {e}")
+
+        print(f"✅ finished {script_name}")
 
 
     def calculate(self, path_gen, path_ref=None):
@@ -416,7 +456,7 @@ class TilelangBench:
         Runs a given Python script on a specified GPU.
         """
         os.makedirs(exe_dir, exist_ok=True)
-        call_status, exec_status, call_stdout, call_stderr, exe_stdout, exe_stderr = code_call_exec_success_allclose_tilelang(code=code, fname=filename, temp_root=tmp_dir, py_folder=self.py_folder)
+        call_status, exec_status, call_stdout, call_stderr, exe_stdout, exe_stderr = code_call_exec_success_allclose_tilelang(code=code, fname=filename, temp_root=tmp_dir, py_folder=self.py_folder, py_interpreter=self.py_interpreter)
         pass_call = False
         pass_exe = False
         if "True" in str(call_status):

@@ -138,6 +138,8 @@ if __name__ == "__main__":
     # root = "../outputs/new_v2/optimagent_gpt41_mini_average_score_tree_dc_mem"
     root = "../outputs/new_v2/optimagent_gpt41_mini_average_score_dynamic_tree_dc_mem"
 
+    root = "../outputs/new_v2/optimagent_qwen35_average_score_dynamic_tree_dc_mem"
+
     iter_files = find_iteration_files(root)
     if not iter_files:
         raise FileNotFoundError(f"No iteration files found for root: {root}")

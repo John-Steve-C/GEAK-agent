@@ -1,3 +1,6 @@
+# use relative import to import VLLM
+# please run with `python -m src.dataloaders.tilelang.renaming`
+
 from openai import OpenAI
 import os
 import json
@@ -12,6 +15,8 @@ try:
 except Exception:  # fallback if tqdm is unavailable
     def tqdm(iterable=None, total=None, **kwargs):
         return iterable if iterable is not None else range(total or 0)
+
+from models.Vllm import VLLMModel
 
 system_prompt = """
 You are an expert in GPU programming and kernel design.
@@ -95,23 +100,39 @@ Rewrite it following the rules above.
 """
 
 system_prompt_tilelang = """
-You are a technical writer specializing in GPU Domain Specific Languages (DSLs). Your task is to translate a prompt/instruction meant for AMD Triton into a prompt/instruction meant for TileLang (TL).
+You are a technical writer specializing in GPU Domain Specific Languages (DSLs). Your task is to rewrite an instruction that was originally written for a Triton implementation into a clean TileLang implementation instruction.
 
-Please rewrite the provided instruction so that it describes a TileLang implementation while maintaining the original functional logic, class names, and kernel interfaces.
+The goal is NOT to generate code. Output only the rewritten instruction.
 
 ## Strict Constraints
 
-1. Preserve Interface Integrity: Maintain exact parity with the original Triton signature. All outer wrapper function names, class names, and input/output tensor names must remain identical.
+1. Preserve only tested public API integrity.
+   - Preserve public wrapper function names, class names, input/output tensor names, and public behavior.
+   - Do not require preserving private/internal kernel names, private low-level kernel signatures, Triton launch signatures, or Triton-specific helper arguments.
+   - Private TileLang helper names and low-level TileLang kernel argument layouts may be different as long as the public wrapper API and behavior are preserved.
 
-2. Metaprogramming & Constants: Remove all Triton-specific decorators and attributes (e.g., @triton.jit, tl.constexpr). Pass compile-time constants (like block sizes) as standard Python arguments to the outer @tl.jit function, which will be captured naturally by the inner @T.prim_func.
+2. Remove Triton-specific wording and APIs.
+   - Do not mention Triton in the final rewritten instruction except when unavoidable as historical source context.
+   - Remove or rewrite references to @triton.jit, triton.language, tl.constexpr, tl.program_id, tl.load, tl.store, Triton launch syntax, pointer arithmetic, masks, and Triton grid syntax.
+   - If the original instruction asks to preserve an original Triton kernel signature, rewrite that as preserving only the public wrapper API and functional behavior.
 
-3. Buffer Indexing vs. Pointer Arithmetic: Completely eliminate Triton's flat pointer arithmetic (ptr + offsets) and boolean mask arrays. Replace them with TileLang’s structured N-dimensional buffer indexing (T.Buffer), relying on calculated grid/block coordinates (e.g., Buffer[global_i, global_j]).
+3. TileLang implementation style.
+   - Describe private TileLang kernels as @tl.jit factories that return an inner @T.prim_func.
+   - Public wrappers must be normal Python functions that allocate outputs, derive concrete shape/dtype/launch parameters, instantiate the private TileLang kernel factory, and invoke the compiled kernel object directly.
+   - Use T.Kernel for launch structure and explicit T.serial/T.parallel loops where needed.
+   - Use structured T.Buffer indexing; avoid flat pointer arithmetic.
+   - Use T.alloc_shared/T.alloc_local or equivalent TileLang buffers where useful.
+   - Use T.copy only for bulk region-to-region transfers. Use scalar assignment for element-wise, masked, or boundary-checked operations.
 
-4. Memory Movement (T.copy vs Assignment): - Use T.alloc_buffer(..., scope="shared") for intermediate shared memory tiles. CRITICAL: Use T.copy(Source[slice], out=Dest[slice]) only for bulk, block-level tensor transfers (regions). If loading data requires element-wise scalar operations, boundary-checking masks, or lives inside a T.serial loop, you must use standard Python assignment (=), not T.copy().
+4. Math, casting, and reductions.
+   - Prefer explicit reduction loops or supported TileLang primitives.
+   - Use T.cast(value, dtype) or value.astype(dtype) for casting.
+   - Do not instruct the implementer to use T.Cast, T.any, T.unary, T.cdiv, T.if_scope, T.get_block_id, T.constant, T.Any, None/-1 buffer dimensions, or Python typing objects inside T.Buffer declarations.
 
-5. Loop Structures & Grid Launch: Replace tl.program_id() with T.Kernel(grid_size). Calculate block coordinates (bid_m, bid_n) using integer division and modulo on the pid. Replace Triton's implied block-level execution with explicit T.serial or T.parallel inner loops for iterating over elements within a tile.
-
-6. Math & Reductions: Replace Triton primitives (tl.sum, tl.max, tl.dot) with their TileLang equivalents (e.g., standard T.exp, T.max, or writing explicit reduction loops if complex axis reductions are required). Ensure proper type casting using T.Cast(dtype, value) before arithmetic operations.
+5. Output quality.
+   - Keep the algorithmic meaning, tensor roles, shape relationships, boundary behavior, and parallelization strategy.
+   - Do not add code.
+   - Do not output markdown fences.
 """
 
 # 5. At the end of the rewritten instruction, add the following implementation requirement:
@@ -126,14 +147,80 @@ print_lock = None
 
 # data = data[:5]  # for testing, only process the first 20 items. Set to -1 for all.
 
+FORBIDDEN_REWRITE_TERMS = (
+    "@triton.jit",
+    "triton.language",
+    "tl.constexpr",
+    "tl.program_id",
+    "tl.load",
+    "tl.store",
+    "tl.arange",
+    "tl.autotune",
+    "tl.cumsum",
+    "tl.dot",
+    "tl.int32",
+    "tl.rand",
+    "tl.sum",
+    "tl.where",
+    "T.Cast",
+    "T.any",
+    "T.unary",
+    "T.cdiv",
+    "T.if_scope",
+    "T.get_block_id",
+    "T.constant",
+    "T.Any",
+    "original Triton signature",
+    "Triton interface",
+    "Triton kernel signature",
+)
 
-def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, Optional[str], Optional[Exception]]:
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+FORBIDDEN_REWRITE_REPLACEMENTS = {
+    "@triton.jit": "the source JIT decorator",
+    "triton.language": "the source DSL module",
+    "tl.constexpr": "source compile-time annotations",
+    "tl.program_id": "source program-index primitives",
+    "tl.load": "source load primitives",
+    "tl.store": "source store primitives",
+    "tl.arange": "source range helpers",
+    "tl.autotune": "TileLang-compatible tuning mechanisms",
+    "tl.cumsum": "source cumulative-sum primitives",
+    "tl.dot": "source dot-product primitives",
+    "tl.int32": "32-bit integer accumulation types",
+    "tl.rand": "source random primitives",
+    "tl.sum": "source sum primitives",
+    "tl.where": "source conditional primitives",
+    "T.Cast": "unsupported cast helpers",
+    "T.any": "unsupported any helpers",
+    "T.unary": "unsupported unary helpers",
+    "T.cdiv": "unsupported ceil-divide helpers",
+    "T.if_scope": "unsupported scoped conditional helpers",
+    "T.get_block_id": "unsupported block-id helpers",
+    "T.constant": "unsupported constant helpers",
+    "T.Any": "unsupported dynamic buffer markers",
+    "original Triton signature": "original low-level signature",
+    "Triton interface": "source framework interface",
+    "Triton kernel signature": "source kernel signature",
+}
+
+model = VLLMModel()
+# print(model.client, model.system_prompt)
+
+def sanitize_rewrite_terms(rewritten_instruction: str) -> str:
+    for term, replacement in FORBIDDEN_REWRITE_REPLACEMENTS.items():
+        rewritten_instruction = rewritten_instruction.replace(term, replacement)
+    return rewritten_instruction
+
+
+def find_rewrite_issues(rewritten_instruction: str):
+    return [term for term in FORBIDDEN_REWRITE_TERMS if term in rewritten_instruction]
+
+
+def rewrite_instruction(idx: int, original_instruction: str, use_openai=True) -> Tuple[int, str, Optional[str], Optional[Exception]]:
     for attempt in range(3):
         try:
-            response = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[
+            rewritten_instruction = None
+            msgs=[
                     {"role": "system", "content": system_prompt_tilelang},
                     {"role": "user", "content": f"""
 ## Source Triton Instruction to Rewrite
@@ -141,11 +228,32 @@ def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, 
 
 ## Rewritten TileLang Instruction (NOT the kernel code)
 """
-                    }],
-                temperature=1.0,
-                max_tokens=2000,
-            )
-            rewritten_instruction = response.choices[0].message.content
+                        }]
+            if use_openai:
+                client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                response = client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    messages=msgs,
+                    temperature=1.0,
+                    max_tokens=2000,
+                )
+                rewritten_instruction = response.choices[0].message.content
+            else:
+                rewritten_instruction = model.generate(
+                    messages=msgs,
+                    max_tokens=8192,
+                    temperature=0,
+                    enable_thinking=True,
+                )
+
+            if rewritten_instruction:
+                rewritten_instruction = sanitize_rewrite_terms(rewritten_instruction)
+                print("Response: ", rewritten_instruction)
+            else:
+                print("Empty response!")
+            issues = find_rewrite_issues(rewritten_instruction)
+            if issues:
+                raise ValueError(f"rewritten instruction still contains forbidden terms: {issues}")
             return idx, original_instruction, rewritten_instruction, None
         except Exception as exc:
             if attempt == 2:
@@ -154,27 +262,31 @@ def rewrite_instruction(idx: int, original_instruction: str) -> Tuple[int, str, 
 
 
 # max_workers = int(os.environ.get("RENAME_THREADS", max(1, min(8, (os.cpu_count() or 4)))))
-max_workers = 64
+max_workers = int(os.environ.get("RENAME_THREADS", 64))
 print(f"Using max_workers={max_workers} for instruction rewriting.")
 # print_lock = threading.Lock()
 rewritten = [None] * len(data)
 
 with ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = [
-        executor.submit(rewrite_instruction, idx, item["instruction"])
+        executor.submit(rewrite_instruction, idx, item["instruction"], False)
         for idx, item in enumerate(data)
     ]
     for future in tqdm(as_completed(futures), total=len(futures), desc="Rewriting"):
         idx, original_instruction, rewritten_instruction, err = future.result()
         if err is not None or rewritten_instruction is None:
-            # with print_lock:
-            print(f"[WARN] Failed to rewrite idx={idx}: {err}", file=sys.stderr)
-            rewritten_instruction = original_instruction
+            print(f"[ERROR] Failed to rewrite idx={idx}: {err}", file=sys.stderr)
+            rewritten[idx] = None
+            continue
         rewritten[idx] = rewritten_instruction
         # with print_lock:
         #     print("Original Instruction:\n", original_instruction)
         #     print("\nRewritten Instruction:\n", rewritten_instruction)
         #     print("\n" + "="*80 + "\n")
+
+failed_indices = [idx for idx, item in enumerate(rewritten) if item is None]
+if failed_indices:
+    raise RuntimeError(f"Instruction rewriting failed for indices: {failed_indices[:20]}")
 
 for idx, item in enumerate(data):
     item["instruction"] = rewritten[idx]
