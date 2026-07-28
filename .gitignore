@@ -14,3 +14,9 @@ src/triton_run_langchain_tmp
 outputs/
 inject_api_key.sh
 tests/
+!tests/
+tests/*
+!tests/test_experiments.py
+!tests/test_memory_snapshot.py
+!tests/test_parallel_model_controller.py
+!tests/test_parallel_workflows.py

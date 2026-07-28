@@ -139,12 +139,18 @@ class TreeCheatsheetManager(CheatsheetManager):
     }
     DEFAULT_LEAF_CAPACITY = 4
 
-    def __init__(self, initial_state: Optional[Dict] = None, use_fixed_categories: bool = True):
+    def __init__(
+        self,
+        initial_state: Optional[Dict] = None,
+        use_fixed_categories: bool = True,
+        embedder=None,
+    ):
         self.sections = list(self.LEGACY_SECTIONS)
         self.current_iteration = 0
         self.leaf_capacity = self.DEFAULT_LEAF_CAPACITY
         self._category_embedding_cache: Dict[str, List[float]] = {}
         self.use_fixed_categories = use_fixed_categories
+        self.embedder = embedder
 
         if initial_state:
             raw_state = copy.deepcopy(initial_state)
@@ -308,11 +314,11 @@ class TreeCheatsheetManager(CheatsheetManager):
                 self.data["items"][item["id"]] = item
                 self._place_item(item, preserve_existing_leaf=False)
 
-    def _safe_get_embedding(self, text: str):
+    def _safe_get_embedding(self, text: str, is_query: bool = False):
         if not text:
             return []
         try:
-            return self._get_embedding(text)
+            return self._get_query_embedding(text) if is_query else self._get_embedding(text)
         except Exception:
             return []
 
@@ -636,7 +642,7 @@ class TreeCheatsheetManager(CheatsheetManager):
         return "\n".join(output)
 
     def _retrieve_items(self, top_k_hot: int, query: Optional[str]) -> Dict[str, Any]:
-        query_embedding = self._safe_get_embedding(query) if query else None
+        query_embedding = self._safe_get_embedding(query, is_query=True) if query else None
         leaf_scores: List[Tuple[str, float]] = []
         for leaf_id in self._iter_leaf_ids():
             leaf = self.data["nodes"][leaf_id]
@@ -1044,7 +1050,7 @@ Available Operations:
             self._remove_item_by_id(candidate["id"])
 
     def prune_by_utility(self, min_usage_ratio: float = 0.5, age_threshold: int = 2, query: Optional[str] = None):
-        query_embedding = self._safe_get_embedding(query) if query else None
+        query_embedding = self._safe_get_embedding(query, is_query=True) if query else None
         to_remove: List[str] = []
         for item_id, item in self.data["items"].items():
             age = self.current_iteration - item.get("created_iter", 0)

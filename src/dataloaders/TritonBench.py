@@ -36,7 +36,7 @@ class TritonBench:
         self.result_path = result_path
 
         self.problem_states = self.load_ps(result_path, target_kernels)
-    
+
     def load_ps(self, path, target_kernels=None):
         problem_states = []
         if path is None:
@@ -167,7 +167,7 @@ class TritonBench:
                 line = tab * 2 + f'folder_path = "{results_path}"\n'
             performance_utils_lines.append(line)
         performance_utils = "".join(performance_utils_lines)
-        with open(performance_utils_path, 'w') as f:
+        with open(os.path.join(tmp_dir, "performance_utils.py"), 'w') as f:
             f.write(performance_utils)
         input_file_list = os.listdir(input_folder_path)
         golden_metrics_list = os.listdir(self.golden_metrics_folder)
@@ -226,10 +226,7 @@ class TritonBench:
 
         tab = ' ' * 4
         
-        # --- Step 1: Update performance_utils.py (Shared Resource) ---
-        # Note: In multi-threading, this file is written by multiple threads. 
-        # Since they write the exact same 'results_path', it is generally safe, 
-        # but theoretically a lock could be used here.
+        # --- Step 1: Copy performance_utils.py into this isolated script directory. ---
         performance_utils_path = os.path.join(self.perf_G_path, "performance_utils.py")
         
         try:
@@ -242,10 +239,10 @@ class TritonBench:
                     line = tab * 2 + f'folder_path = "{results_path}"\n'
                 performance_utils_lines.append(line)
             
-            with open(performance_utils_path, 'w') as f:
+            with open(os.path.join(tmp_dir, "performance_utils.py"), 'w') as f:
                 f.write("".join(performance_utils_lines))
         except Exception as e:
-            print(f"Warning: Failed to update performance_utils.py (might be locked by another thread): {e}")
+            print(f"Warning: Failed to create isolated performance_utils.py: {e}")
 
         # --- Step 2: Generate the specific perf script ---
         # Construct expected perf filename (e.g., 'gemm.py' -> 'gemm_perf.py')
@@ -502,6 +499,3 @@ class TritonBench:
                     f.write(code)
 
         return pass_call, pass_exe, call_stdout, call_stderr, exe_stdout, exe_stderr
-    
-    
-    

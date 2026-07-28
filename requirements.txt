@@ -14,5 +14,7 @@ transformers
 regex
 requests
 rank-bm25
+langchain-core
+langchain-openai
 loguru
 tenacity

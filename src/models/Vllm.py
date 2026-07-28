@@ -1,9 +1,5 @@
-import os
+import threading
 from typing import List
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-
-from models.Base import BaseModel
-from vllm import LLM, SamplingParams
 
 from openai import OpenAI
 
@@ -16,6 +12,7 @@ class VLLMModel():
         dtype="bfloat16",
         base_url="http://localhost:8001/v1",
         api_key="token-abc123",
+        timeout=300,
     ):
         self.model_id = model_id
         # self.llm = LLM(
@@ -26,8 +23,11 @@ class VLLMModel():
         self.client = OpenAI(
             base_url=base_url,
             api_key=api_key,
-            timeout=300
+            timeout=timeout,
+            max_retries=0,
             )
+        self._thread_state = threading.local()
+        self.last_usage = {}
         self.system_prompt = (
             "You are an expert programmer. Before generating the final code, "
             "strictly plan your logic step-by-step in the thinking phase. "
@@ -35,6 +35,15 @@ class VLLMModel():
             "implementation, and written in clear natural language. Never "
             "output repeating numbers or symbols."
         )
+    @property
+    def last_usage(self):
+        return getattr(self._thread_state, "last_usage", {})
+
+    @last_usage.setter
+    def last_usage(self, usage):
+        self._thread_state.last_usage = usage
+
+
 
 
     # def _messages_to_prompt(self, messages: List[dict]) -> str:
@@ -87,7 +96,6 @@ class VLLMModel():
 
     #     return outputs[0].outputs[0].text.strip()
 
-    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
     def generate(self, 
                  messages: List, 
                  temperature=1, 
@@ -98,7 +106,9 @@ class VLLMModel():
                  min_p=0.05,
                  top_k=20,
                  repetition_penalty=1.0,
-                 enable_thinking=True) -> str:
+                 enable_thinking=True,
+                 seed=None,
+                 **kwargs) -> str:
         if not messages or messages[0].get("role") != "system":
             messages = [
                 {"role": "system", "content": self.system_prompt},
@@ -112,6 +122,7 @@ class VLLMModel():
             top_p=top_p,
             presence_penalty=presence_penalty,
             frequency_penalty=frequency_penalty,
+            seed=seed,
             extra_body={
                 "repetition_penalty": repetition_penalty,
                 "min_p": min_p,
@@ -139,4 +150,10 @@ class VLLMModel():
                 f"reasoning_chars={len(reasoning or '')}). "
                 "Increase max_tokens or disable thinking."
             )
+        usage = getattr(response, "usage", None)
+        self.last_usage = {
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
+            "completion_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
+            "total_tokens": getattr(usage, "total_tokens", 0) if usage else 0,
+        }
         return output

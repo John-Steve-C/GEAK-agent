@@ -4,7 +4,6 @@ import ast
 import json
 
 from openai import OpenAI
-from transformers import pipeline
 from typing import List
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 import os
@@ -16,10 +15,22 @@ import os
 #     api_key="token-abc123",
 #     timeout=None,
 # )
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is required for embedding-based retrieval")
+        _client = OpenAI(api_key=api_key)
+    return _client
+
+
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
 def get_embedding(text: str) -> List[float]:
-    response = client.embeddings.create(
+    response = _get_client().embeddings.create(
         input=text,
         model="text-embedding-3-small"
     )
@@ -31,7 +42,7 @@ def get_embedding(text: str) -> List[float]:
 
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
 def get_response(prompt: str, temperature=1) -> str:
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model="gpt-4.1-mini",
         messages=[
             {

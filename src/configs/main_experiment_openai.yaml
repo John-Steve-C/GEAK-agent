@@ -1,0 +1,77 @@
+experiment:
+  name: main_experiment
+  phase: main
+  output_root: outputs/main_experiment
+  split_manifest: src/configs/paired_split.json
+  pilot_adaptation_tasks: 5
+  pilot_evaluation_tasks: 5
+  pilot_adaptation_epochs: 1
+
+model:
+  backend: openai
+  model_id: gpt-5.6-sol # gpt-4.1
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  temperature: 1.0
+  max_tokens: 8192
+  top_p: 0.95
+  min_p: 0.05
+  top_k: 20
+  repetition_penalty: 1.0
+  enable_thinking: true
+  request_timeout_seconds: 300
+
+parallelism:
+  model_workers: 32
+
+matrix:
+  dsls: [triton, tilelang]
+  workflows: [fixed, langchain]
+  memories: [none, flat, tree]
+  seeds: [42]   # [0, 42]
+  adaptation_epochs: 3
+
+budget:
+  max_model_calls: 10              # LangChain autonomous turns only
+  max_candidate_evaluations: 5       # LangChain evaluation-tool calls only
+  max_tokens_per_call: 8192
+  model_timeout_seconds: 300
+  correctness_timeout_seconds: 120
+  performance_timeout_seconds: 600
+  task_timeout_seconds: 3600
+
+memory:
+  top_k: 20
+  use_fixed_categories: false
+  prune_threshold: 0.5
+  prune_age_threshold: 2
+  embedding_model: /shared/models/hf/Qwen3-Embedding-0.6B  # Qwen/Qwen3-Embedding-0.6B
+  embedding_cache: outputs/main_experiment/_embedding_cache.json
+  initial_files:
+    triton: src/new_first_cheatsheet.json
+    tilelang: src/tilelang_first_cheatsheet.json
+
+retrieval:
+  enabled_dsls: [triton]
+  corpus_path: src/dataloaders/TB_eval/train_crawl.json
+  top_k: 1
+
+datasets:
+  triton:
+    statis_path: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json
+    py_folder: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1
+    instruction_path: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_comp_alpac_v1_fixed_with_difficulty.json
+    golden_metrics: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics
+    perf_G_path: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G
+    py_interpreter: python
+    correctness_gpu: 0
+    performance_gpu: 0
+  tilelang:
+    statis_path: src/dataloaders/tilelang/tilelang_instruction.json
+    py_folder: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/data/TritonBench_G_v1
+    instruction_path: src/dataloaders/tilelang/tilelang_instruction.json
+    golden_metrics: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G/golden_metrics
+    perf_G_path: /home/wentao/GEAK-eval/geak_eval/data/TritonBench/performance_metrics/perf_G
+    py_interpreter: /home/wentao/miniconda3/envs/GEAK/bin/python
+    correctness_gpu: 2
+    performance_gpu: 3

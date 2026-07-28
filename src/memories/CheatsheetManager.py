@@ -11,7 +11,7 @@ class CheatsheetManager:
         "penalty": 0.25,
     }
 
-    def __init__(self, initial_state: Optional[Dict] = None):
+    def __init__(self, initial_state: Optional[Dict] = None, embedder=None):
         """
         Initialize the KnowledgeBase (Cheatsheet).
         Structure:
@@ -27,6 +27,7 @@ class CheatsheetManager:
             "failed_attempts"
         ]
         self.current_iteration = 0
+        self.embedder = embedder
 
         if initial_state:
             self.data = initial_state
@@ -79,9 +80,18 @@ class CheatsheetManager:
         return "\n".join(part for part in parts if part).strip()
 
     def _get_embedding(self, text: str):
+        if self.embedder is not None:
+            if hasattr(self.embedder, "embed_document"):
+                return self.embedder.embed_document(text)
+            return self.embedder(text)
         from retrievers.retrieve_utils import get_embedding
 
         return get_embedding(text)
+
+    def _get_query_embedding(self, text: str):
+        if self.embedder is not None and hasattr(self.embedder, "embed_query"):
+            return self.embedder.embed_query(text)
+        return self._get_embedding(text)
 
     def _ensure_embedding(self, item: Dict[str, Any]):
         embedding = item.get("embedding", [])
@@ -153,7 +163,7 @@ class CheatsheetManager:
     ) -> float:
         self._normalize_item(item)
         if query and query_embedding is None:
-            query_embedding = self._get_embedding(query)
+            query_embedding = self._get_query_embedding(query)
 
         usage_score = self.calculate_usage_score(item)
         relevance_score = self.calculate_semantic_relevance(item, query_embedding=query_embedding)
@@ -195,7 +205,11 @@ class CheatsheetManager:
         in UPDATE/VARIATION/EXPAND operations.
         """
         output = []
-        query_embedding = self._get_embedding(query) if top_k_hot != -1 and query else None
+        query_embedding = (
+            self._get_query_embedding(query)
+            if top_k_hot != -1 and query
+            else None
+        )
         for section in self.sections:
             output.append(f"=== {section.upper().replace('_', ' ')} ===")
             items = self.data.get(section, [])
@@ -1285,7 +1299,7 @@ Output ONLY a valid JSON object with:
         :param age_threshold: 冷却期。新创建的条目在 N 轮内不会被清理。
         """
         print(f"\n--- Starting Utility Pruning (Iter {self.current_iteration}) ---")
-        query_embedding = self._get_embedding(query) if query else None
+        query_embedding = self._get_query_embedding(query) if query else None
         
         for section in self.sections:
             # if section == "meta_reasoning": continue # 元规则通常保留

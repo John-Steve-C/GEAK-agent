@@ -1,60 +1,9 @@
-from agents.OptimAgent import OptimAgent
-from models.OpenAI import OpenAIModel
-from models.OpenRouter import OpenRouterModel
-from models.Vllm import VLLMModel
-from dataloaders.TritonBench import TritonBench
-from args_config import load_config
+"""Compatibility launcher for the fixed Triton/tree condition."""
 
-import os
-import sys
-
-def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/tritonbench_optimagent_config_new.yaml"
-    args = load_config(config_path)
-
-
-    # setup LLM model
-    model = OpenAIModel(api_key=os.environ.get("OPENAI_API_KEY"), model_id=args.model_id)
-    # model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"), model_id=args.model_id)
-    # model = VLLMModel(model_id=args.model_id)
-
-    message = [
-        {"role": "system", "content": "You are a helpful and precise assistant for optimizing the performance of Triton kernels."},
-        {"role": "user", "content": "What is 1+1?"},
-    ]
-    response = model.generate(message)
-    print("LLM response:", response)
-
-    # setup dataset
-    dataset = TritonBench(statis_path=args.statis_path, 
-                          py_folder=args.py_folder, 
-                          instruction_path=args.instruction_path, 
-                          py_interpreter=args.py_interpreter, 
-                          golden_metrics=args.golden_metrics,
-                          perf_ref_folder=args.perf_ref_folder,
-                          perf_G_path=args.perf_G_path,
-                          result_path=args.result_path,
-                          target_kernels=args.target_kernels)
-
-    # setup agent
-    agent = OptimAgent(model=model, dataset=dataset, corpus_path=args.corpus_path, mem_file=args.mem_file)
-
-    # run the agent
-    agent.run(output_path=args.output_path, 
-              multi_thread=args.multi_thread,
-              # thread_num=args.thread_num,
-              iteration_num=args.max_iteration, 
-              temperature=args.temperature, 
-              datalen=args.datalen,
-              start_iter=args.start_iter,
-              start_idx=args.start_idx,
-              ancestor_num=args.ancestor_num,
-              update_cheatsheet=getattr(args, "update_cheatsheet", True))
+from run_experiment import main
 
 
 if __name__ == "__main__":
-    # import os
-    # # 逻辑核心数（包含超线程）
-    # print("os.cpu_count():", os.cpu_count())    # 64
-
-    main()
+    raise SystemExit(
+        main(default_filters={"dsl": "triton", "workflow": "fixed", "memory": "tree"})
+    )
